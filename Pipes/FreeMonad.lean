@@ -14,13 +14,13 @@ import Aesop
 import Init.Control.State
 import Batteries.Control.AlternativeMonad
 
--- def F (f : Type u → Type u) (α : Type u) := ∀ {r : Type u}, (α → r) → (f r → r) → r
+abbrev F' (f : Type u → Type u) (α : Type u) := ∀ {r : Type u}, (α → r) → (f r → r) → r
 
 -- @[always_inline, inline] def F.runF (x : F f α) (kp : α → r) (kf : f r → r) : r := x kp kf
 
 -- Church-encoded free monad
 structure F (f : Type u → Type u) (α : Type u) : Type (u+1) where
-  runF : {r : Type u} → (α → r) → (f r → r) → r
+  runF : ∀ {r : Type u}, (α → r) → (f r → r) → r
 
 -- def F (f : Type u → Type u) (α : Type u) := ∀ {r : Type u}, (α → r) → (f r → r) → r ?
 
