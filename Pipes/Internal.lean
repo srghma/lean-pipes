@@ -1,10 +1,4 @@
 /-
-Pipes.Internal - Lean 4 Implementation
-
-A streaming library based on the Proxy type, implemented using Church-encoded free monads.
-adapted from PureScript pipes.
-
-The Proxy type represents bidirectional communication between components:
 - a' is the type of values flowing upstream
 - a  is the type of values flowing downstream
 - b' is the type of values flowing upstream (output)
@@ -43,14 +37,11 @@ def Proxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
 
 @[inline] instance [Functor m] : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.monadLift⟩
 
--- From https://github.com/leanprover-community/mathlib4/blob/730e4db21155a3faee9cadd55d244dbf72f06391/Mathlib/Control/Combinators.lean#L14-L17
-@[inline] private def joinM {m : Type u → Type u} [Monad m] {α : Type u} (a : m (m α)) : m α := bind a id
-
 @[inline] def runProxy [Monad m] [Functor m] (p : Proxy Empty any any2 Empty m r) : m r :=
   p.iterM fun
     | ProxyF.Request x _ => nomatch x  -- x : Empty → impossible
     | ProxyF.Respond x _ => nomatch x  -- x : Empty → impossible
-    | ProxyF.M mval      => joinM mval -- just run the effect
+    | ProxyF.M mval      => Monad.joinM mval -- just run the effect
 
 -- Alternative instance when m has Alternative
 @[inline] instance [Alternative m] [Functor m] : Alternative (Proxy a' a b' b m) where
@@ -60,11 +51,9 @@ def Proxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
       (pure (x.runF kp kf))
       (fun _ => pure ((y ()).runF kp kf))))⟩
 
-set_option diagnostics true
-
 -- @[inline] instance [Alternative m] [Functor m] : Alternative (Proxy a' a b' b m) := inferInstanceAs (Alternative (F (ProxyF a' a b' b m)))
 
-@[inline] instance [Alternative m] [Functor m] : HOrElse (Proxy a' a b' b m r) (Proxy a' a b' b m r) (Proxy a' a b' b m r) := ⟨fun x y => Alternative.orElse x y⟩
+@[inline] instance [Alternative m] [Functor m] : HOrElse (Proxy a' a b' b m r) (Proxy a' a b' b m r) (Proxy a' a b' b m r) := ⟨Alternative.orElse⟩
 
 namespace AlternativeTest
 def testAlt1 : Proxy Empty Empty Empty Empty Option String := failure
@@ -78,74 +67,87 @@ def testAlt2 : Proxy Empty Empty Empty Empty Option String := F.pure $ "world"
 end AlternativeTest
 
 -- MonadState instance
-instance [Functor m] [MonadState σ m] : MonadState σ (Proxy a' a b' b m) where
+@[inline] instance [Functor m] [MonadState σ m] : MonadState σ (Proxy a' a b' b m) where
   get := Proxy.monadLift MonadState.get
   set s := Proxy.monadLift (MonadState.set s)
   modifyGet f := Proxy.monadLift (MonadState.modifyGet f)
 
 -- MonadReader instance
-instance [Functor m] [MonadReader ρ m] : MonadReader ρ (Proxy a' a b' b m) where
+@[inline] instance [Functor m] [MonadReader ρ m] : MonadReader ρ (Proxy a' a b' b m) where
   read := Proxy.monadLift MonadReader.read
 
 -- Pipe type aliases
-abbrev Producer b m r := Proxy Empty Unit Unit b m r
-abbrev Consumer a m r := Proxy Unit a Unit Empty m r
-abbrev Pipe a b m r := Proxy Unit a Unit b m r
-abbrev Effect m r := Proxy Empty Unit Unit Empty m r
+abbrev Effect      := Proxy Empty Unit Unit Empty
+abbrev Producer b  := Proxy Empty Unit Unit b
+abbrev Pipe a b    := Proxy Unit a Unit b
+abbrev Consumer a  := Proxy Unit a Unit Empty
+abbrev Client a' a := Proxy a' a Unit Empty
+abbrev Server b' b := Proxy Empty Unit b' b
 
--- Producer operations
-def yield [Functor m] (resp : b) : Producer b m Unit := Proxy.respond resp >>= fun _ => pure ()
+abbrev Effect_        m r := forall {x' x y' y}, Proxy x'   x y'   y m r
+abbrev Producer_ b    m r := forall {x' x},      Proxy x'   x Unit b m r
+abbrev Consumer_ a    m r := forall {y' y},      Proxy Unit a y'   y m r
+abbrev Server_   b' b m r := forall {x' x},      Proxy x'   x b'   b m r
+abbrev Client_   a' a m r := forall {y' y},      Proxy a'   a y'   y m r
 
-def for [Monad m] [Functor m] (p : Producer b m r) (f : b → Consumer b m Unit) : Effect m r :=
-  composeProxy p (f (closed X.mk))
+-- @[inline] abbrev Proxy.yield := Proxy.respond
+@[inline] abbrev Proxy.yield [Functor m] : b -> Producer b m Unit := Proxy.respond
+@[inline] def Proxy.await [Functor m] : Consumer_ a m a := Proxy.request ()
 
--- Consumer operations
-def await [Functor m] : Consumer a m a :=
-  request () >>= fun a => pure a
+def Proxy.eachList [Monad m] [Functor m] : List a → Producer_ a m Unit
+| []      => pure ()
+| (a::as) => Proxy.respond a *> eachList as
 
-def (>~) [Monad m] [Functor m] (p : Producer a m r) (c : Consumer a m s) : Effect m r :=
-  composeProxy p c
+mutual
 
--- Pipe operations
-def cat [Functor m] : Pipe a a m r :=
-  ⟨fun kp kf => kp (closed X.mk)⟩ -- Identity pipe
+def nextGo [Monad m] [Functor m] : ProxyF Empty Unit Unit b m r -> m (Sum r (a × Proxy Empty Unit Unit b m r)) -- ERROR
+  | ProxyF.Request v _ => nomatch v
+  | ProxyF.Respond a fu => pure (Sum.inr (a, fu ()))
+  | ProxyF.M act => act >>= next
 
-def take [Functor m] (n : Nat) : Pipe a a m Unit :=
-  let rec go : Nat → Pipe a a m Unit
-    | 0 => pure ()
-    | n+1 => do
-      a ← await
-      yield a
-      go n
-  go n
+def next [Monad m] [Functor m] : Proxy Empty Unit Unit b m r -> m (Sum r (a × Proxy Empty Unit Unit b m r)) -- ERROR
+  | p => p.iterM nextGo
 
-def drop [Functor m] (n : Nat) : Pipe a a m Unit :=
-  let rec go : Nat → Pipe a a m Unit
-    | 0 => cat
-    | n+1 => do
-      _ ← await
-      go n
-  go n
+end
 
-def map [Functor m] (f : a → b) : Pipe a b m r :=
-  ⟨fun kp kf => kp (closed X.mk)⟩ -- Simplified for now
+-- Forward composition
+def composeProxy [Monad m] [Functor m]
+  (up : Proxy a' a b' b m r)
+  (down : Proxy b' b c' c m r) :
+  Proxy a' a c' c m r := do
+    -- Try to step upstream first
+    up.runF
+      pure -- upstream finished
+      (fun upEffect =>
+        match upEffect with
+        | ProxyF.Respond b k =>
+          -- Feed b to downstream
+          down.runF
+            pure -- downstream finished
+            (fun downEffect =>
+              match downEffect with
+              | ProxyF.Request b'' k' => composeProxy up (k' b)
+              | ProxyF.Respond c k' => do
+                c' ← Proxy.respond c
+                composeProxy (k ()) (k' c')
+              | ProxyF.M m => do
+                next ← Proxy.monadLift m
+                composeProxy up next)
+        | ProxyF.M m => do
+          next ← Proxy.monadLift m
+          composeProxy next down)
+        | ProxyF.Request a' k => Proxy.request a' >>= fun a => composeProxy (k a) down
 
--- Recursive worker to observe effects and re-wrap in ProxyF
--- (p : Proxy (a' : Type u) (a : Type u) (b' : Type u) (b : Type u) (m : Type u → Type u) (r : Type u)) :
--- def observeGo [Monad m] [Functor m] (p : Proxy a' a b' b m r) : m (Proxy a' a b' b m r) :=
---   p.runF
---     (fun r => pure (F.pure r))  -- pure case
---     (fun x =>
---       match x with
---       | Request a' fa  => pure (F.monadLift (Request a' (observe ∘ fa)))
---       | Respond b fb'  => pure (F.monadLift (Respond b  (observe ∘ fb')))
---       | M mnext        => mnext >>= observeGo
---     )
---
--- -- Top-level observe combinator
--- def observe [Monad m] [Functor m]
---     (p : Proxy a' a b' b m r) : Proxy a' a b' b m r :=
---   F.monadLift (observeGo p)
+-- Backward composition
+def composeProxyFlipped [Monad m] [Functor m]
+  (p2 : Proxy b' b c' c m r)
+  (p1 : Proxy a' a b' b m r) :
+  Proxy a' a c' c m r :=
+  composeProxy p1 p2
+
+-- Composition operators
+infixl:60 " >-> " => composeProxy
+infixl:60 " <-< " => composeProxyFlipped
 
 -- Example usage
 namespace Examples
@@ -155,21 +157,19 @@ def numbers (n : Nat) : Producer Nat IO Unit :=
   let rec go : Nat → Producer Nat IO Unit
     | 0 => pure ()
     | n+1 => do
-      yield n
+      Proxy.yield n
       go n
   go n
 
 -- Simple consumer that prints numbers
-def printer : Consumer Nat IO Unit :=
-  let rec go : Consumer Nat IO Unit := do
-    n ← await
-    lift (IO.println s!"Number: {n}")
-    go
-  go
+def printer : Consumer Nat IO Unit := do
+  let n ← Proxy.await
+  monadLift (IO.println s!"Number: {n}")
+  printer
 
 -- Example pipeline
 def examplePipeline : Effect IO Unit :=
-  numbers 5 >~ take 3 >-> printer
+  numbers 5 >-> printer
 
 end Examples
 
@@ -188,36 +188,46 @@ theorem bind_pure_right [Monad m] (p : Proxy a' a'' b' b'' m α) :
 
 end Laws
 
--- Forward composition
-def composeProxy [Monad m] [Functor m]
-  (p1 : Proxy a' a b' b m r)
-  (p2 : Proxy b' b c' c m r) :
-  Proxy a' a c' c m r :=
-⟨fun kp kf =>
-  let rec go (px : Proxy a' a b' b m r) (py : Proxy b' b c' c m r) : m (ProxyF a' a c' c m r) := do
-    px.runF
-      (fun r => py.runF (pure ∘ kp ∘ fun _ => r) (pure ∘ kf))
-      (fun pfx =>
-        match pfx with
-        | ProxyF.Request a' k => pure (ProxyF.Request a' (fun a => ⟨fun kp' kf' => go (k a) py⟩))
-        | ProxyF.Respond b k =>
-          py.runF
-            (pure ∘ kf ∘ ProxyF.Respond b ∘ fun b' => ⟨fun kp' kf' => go (k b') py⟩)
-            (fun pfy =>
-              match pfy with
-              | ProxyF.Request b'' k' => go px (k' b)
-              | ProxyF.Respond c k' => pure (ProxyF.Respond c (fun c' => ⟨fun kp' kf' => go px (k' c')⟩))
-              | ProxyF.M m => ProxyF.M <$> m)
-        | ProxyF.M m => ProxyF.M <$> (m >>= fun next => go next py))
-  kf <$> go p1 p2⟩
+-- def for [Monad m] [Functor m] (p : Producer b m r) (f : b → Consumer b m Unit) : Effect m r :=
+--   composeProxy p (f (closed X.mk))
 
--- Backward composition
-def composeProxyFlipped [Monad m] [Functor m]
-  (p2 : Proxy b' b c' c m r)
-  (p1 : Proxy a' a b' b m r) :
-  Proxy a' a c' c m r :=
-  composeProxy p1 p2
+-- Pipe operations
+-- def cat [Functor m] : Pipe a a m r :=
+--   ⟨fun kp kf => kp (closed X.mk)⟩ -- Identity pipe
 
--- Composition operators
-infixl:60 " >-> " => composeProxy
-infixl:60 " <-< " => composeProxyFlipped
+-- def take [Functor m] (n : Nat) : Pipe a a m Unit :=
+--   let rec go : Nat → Pipe a a m Unit
+--     | 0 => pure ()
+--     | n+1 => do
+--       a ← await
+--       yield a
+--       go n
+--   go n
+
+-- def drop [Functor m] (n : Nat) : Pipe a a m Unit :=
+--   let rec go : Nat → Pipe a a m Unit
+--     | 0 => cat
+--     | n+1 => do
+--       _ ← await
+--       go n
+--   go n
+
+-- def map [Functor m] (f : a → b) : Pipe a b m r :=
+--   ⟨fun kp kf => kp (closed X.mk)⟩
+
+-- Recursive worker to observe effects and re-wrap in ProxyF
+-- (p : Proxy (a' : Type u) (a : Type u) (b' : Type u) (b : Type u) (m : Type u → Type u) (r : Type u)) :
+-- def observeGo [Monad m] [Functor m] (p : Proxy a' a b' b m r) : m (Proxy a' a b' b m r) :=
+--   p.runF
+--     (fun r => pure (F.pure r))  -- pure case
+--     (fun x =>
+--       match x with
+--       | Request a' fa  => pure (F.monadLift (Request a' (observe ∘ fa)))
+--       | Respond b fb'  => pure (F.monadLift (Respond b  (observe ∘ fb')))
+--       | M mnext        => mnext >>= observeGo
+--     )
+--
+-- -- Top-level observe combinator
+-- def observe [Monad m] [Functor m]
+--     (p : Proxy a' a b' b m r) : Proxy a' a b' b m r :=
+--   F.monadLift (observeGo p)

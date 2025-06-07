@@ -24,12 +24,15 @@ structure F (f : Type u → Type u) (α : Type u) : Type (u+1) where
 
 -- def F (f : Type u → Type u) (α : Type u) := ∀ {r : Type u}, (α → r) → (f r → r) → r ?
 
+-- @[always_inline, inline] def F.runFExpl (x : F f α) (kp : α → r) (kf : f r → r) : r := @x.runF r kp kf
+-- @[always_inline, inline] def F.runF (x : F f α) (kp : α → r) (kf : f r → r) : r := x kp kf
+
 -- Functor map
-@[inline] def F.map [Functor f] (g : α → β) (m : F f α) : F f β := ⟨fun kp kf => m.runF (kp ∘ g) kf⟩
-@[inline] def F.pure (a : α) : F f α := ⟨fun kp _kf => kp a⟩
-@[inline] def F.bind (m : F f α) (f' : α → F f β) : F f β := ⟨fun kp kf => m.runF (fun a => (f' a).runF kp kf) kf⟩
-@[inline] def F.monadLift [Functor f] (fa : f α) : F f α := ⟨fun kp kf => kf (kp <$> fa)⟩
-@[inline] def F.foldF (pureF : α → r) (impureF : f r → r) (fa : F f α) : r := fa.runF pureF impureF
+@[inline, simp] def F.map [Functor f] (g : α → β) (m : F f α) : F f β := ⟨fun kp kf => m.runF (kp ∘ g) kf⟩
+@[inline, simp] def F.pure (a : α) : F f α := ⟨fun kp _kf => kp a⟩
+@[inline, simp] def F.bind (m : F f α) (f' : α → F f β) : F f β := ⟨fun kp kf => m.runF (fun a => (f' a).runF kp kf) kf⟩
+@[inline, simp] def F.monadLift [Functor f] (fa : f α) : F f α := ⟨fun kp kf => kf (kp <$> fa)⟩
+@[inline, simp] def F.foldF (pureF : α → r) (impureF : f r → r) (fa : F f α) : r := fa.runF pureF impureF
 
 @[inline] instance [Functor f] : Functor (F f) := { map := F.map }
 @[inline] instance : Pure (F f) := ⟨F.pure⟩
@@ -47,22 +50,30 @@ structure F (f : Type u → Type u) (α : Type u) : Type (u+1) where
 -- @
 
 -- From https://github.com/leanprover-community/mathlib4/blob/730e4db21155a3faee9cadd55d244dbf72f06391/Mathlib/Control/Combinators.lean#L14-L17
-@[inline] def joinM {m : Type u → Type u} [Monad m] {α : Type u} (a : m (m α)) : m α := bind a id
+@[always_inline, inline, simp] def Monad.joinM {m : Type u → Type u} [Monad m] {α : Type u} (a : m (m α)) : m α := bind a id
 
-@[inline] def F.retract [Monad m] : F m α → m α := fun m => m.runF Pure.pure joinM
+@[inline, simp] def F.retract [Monad m] : F m α → m α := fun m => m.runF Pure.pure Monad.joinM
 -- Natural transformation lifting
-@[inline] def F.hoistF (nt : {α : Type u} → f α → g α) : F f α → F g α := fun m => ⟨fun kp kf => m.runF kp (kf ∘ nt)⟩
+@[inline, simp] def F.hoistF (nt : {α : Type u} → f α → g α) : F f α → F g α := fun m => ⟨fun kp kf => m.runF kp (kf ∘ nt)⟩
 -- Monadic iteration
-@[inline] def F.iterM [Pure m] (phi : f (m α) → m α) : F f α → m α := fun xs => xs.runF Pure.pure phi
+@[inline, simp] def F.iterM [Pure m] (phi : f (m α) → m α) : F f α → m α := fun xs => xs.runF Pure.pure phi
 
-@[inline] instance [Monad f] [Alternative f] : Alternative (F f) where
-  failure := ⟨fun _kp kf => kf Alternative.failure⟩
-  orElse x y := ⟨fun kp kf =>
-    let try_x := x.runF (fun a => pure (kp a)) (fun fr => joinM fr)
-    let try_y := fun _ => (y ()).runF (fun a => pure (kp a)) (fun fr => joinM fr)
+@[inline, simp]
+def F.failure [Alternative f] : F f α := ⟨fun _kp kf => kf Alternative.failure⟩
+
+@[inline, simp]
+def F.orElse [Monad f] [Alternative f] (x : F f α) (y : (Unit -> F f α)) : F f α :=
+  ⟨fun kp kf =>
+    let try_x := x.runF (fun a => Pure.pure (kp a)) Monad.joinM
+    let try_y := fun _ => (y ()).runF (fun a => Pure.pure (kp a)) Monad.joinM
     kf (Alternative.orElse try_x try_y)
   ⟩
 
+-- TODO: use def like ReaderT, but <|> fails even with OrElse
+-- @[inline] instance [Monad f] [Alternative f] : OrElse (F f a) := ⟨F.orElse⟩
+-- @[inline] instance [Monad f] [Alternative f] : HOrElse (F f a) (F f a) (F f a) := ⟨F.orElse⟩
+
+@[inline] instance [Monad f] [Alternative f] : Alternative (F f) := ⟨F.failure, F.orElse⟩
 @[inline] instance [Monad f] [Alternative f] : AlternativeMonad (F f) where
 
 namespace AlternativeTests
@@ -75,7 +86,7 @@ namespace AlternativeTests
       m.runF (fun x => s!"a->r {x}") (fun | none => "fr->r was none" | some s => s)
 
     -- Test with Option as the base functor
-    def testF1 : F Option String := failure
+    def testF1 : F Option String := F.failure
     def testF2 : F Option String := F.pure "hello"
     def testF3 : F Option String := F.pure "world"
 
@@ -129,18 +140,37 @@ instance : LawfulMonad (F f) := LawfulMonad.mk'
 instance : LawfulApplicative (F f) := inferInstance
 instance : LawfulFunctor (F f) := inferInstance
 
+@[ext]
+theorem F.ext
+  (x y : F f α)
+  (h : ∀ (r : Type u), (α → r) → (f r → r) → @x.runF r = @y.runF r) : x = y := by
+    cases x; cases y
+    simp_all only [mk.injEq]
+    apply funext; intro r
+    apply funext; intro kp
+    apply funext; intro kf
+    exact congrFun (congrFun (h r kp kf) kp) kf
+
 instance [Monad f] [Alternative f] [LawfulAlternative f] [LawfulMonad f] : LawfulAlternative (F f) where
   map_failure g := by rfl
   failure_seq x := by rfl
-  orElse_failure x := by cases x <;> aesop?
-
-  failure_orElse y := by
+  orElse_failure x := by
+    apply F.ext
+    intros r kp kf
+    simp [F.orElse, F.failure, F.runF, Alternative.orElse, Alternative.failure, Monad.joinM]
     sorry
 
+  -- failure <|> y = y
+  failure_orElse y := by sorry
+
+  -- (x <|> y) <|> z = x <|> (y <|> z)
   orElse_assoc x y z := by
+    cases x; cases y; cases z
     sorry
 
+  -- map g (x <|> y) = map g x <|> map g y
   map_orElse x y g := by
+    cases x; cases y;
     sorry
 
 -- Properties and theorems
@@ -160,7 +190,7 @@ namespace Properties
     theorem retract_monadLift_id [Monad m] [LawfulMonad m] (ma : m α) :
       F.retract (F.monadLift ma : F m α) = ma := by
       unfold F.retract F.monadLift
-      simp_all only [bind_pure, bind_map_left, id_eq]
+      simp_all only [Monad.joinM, bind_pure, bind_map_left, id_eq]
 
     theorem map_id [Functor f] (x : F f α) : x.map id = x := by
       cases x; rfl
