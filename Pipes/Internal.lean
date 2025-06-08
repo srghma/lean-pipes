@@ -1,84 +1,66 @@
--- Proxy type from Coq (without Yoneda lemma application)
-inductive Proxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1) where
-  | Request : a' → (a → Proxy a' a b' b m r) → Proxy a' a b' b m r
-  | Respond : b → (b' → Proxy a' a b' b m r) → Proxy a' a b' b m r
-  | M : {x : Type u} → (x → Proxy a' a b' b m r) → m x → Proxy a' a b' b m r
-  | Pure : r → Proxy a' a b' b m r
-  deriving Nonempty, Inhabited
+import Aesop
+import Init.Control.State
+import Batteries.Control.AlternativeMonad
 
-partial def infiniteLoop (n : Nat) : Nat := infiniteLoop (n + 1)
+-- Church-encoded Proxy type
+@[inline] def Proxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1) :=
+  ∀ {result : Type u},
+    (r → result) →                 -- Handle Pure
+    (a' → (a → result) → result) → -- Handle Request
+    (b → (b' → result) → result) → -- Handle Respond
+    (m result → result) →          -- Handle M
+    result
 
-def tryUsePartial (n : Nat) : Nat := infiniteLoop n
+-- Basic constructors
+@[inline] def Proxy.Pure (xr : r) : Proxy a' a b' b m r :=
+  fun kp _ka _kb _km => kp xr
 
-unsafe def Array.iterateImpl := ...unsafe but fast version
+@[inline] def Proxy.Request (xa' : a') (k : a → Proxy a' a b' b m r) : Proxy a' a b' b m r :=
+  fun kp ka kb km => ka xa' (fun a => k a kp ka kb km)
 
-@[implemented_by Array.iterateImpl]
-def Array.iterate := ...safe but slow version
+@[inline] def Proxy.Respond (xb : b) (k : b' → Proxy a' a b' b m r) : Proxy a' a b' b m r :=
+  fun kp ka kb km => kb xb (fun b' => k b' kp ka kb km)
 
--- Fundamental fold operation
-partial def foldProxy [Monad m] [Inhabited s]
+@[inline] def Proxy.M [Functor m] (mx : m r) : Proxy a' a b' b m r :=
+  fun kp _ka _kb km => km (Functor.map kp mx)
+
+-- Fold function (trivial for Church encoding)
+@[inline] def foldProxy [Monad m]
   (ka : a' → (a → s) → s)
   (kb : b → (b' → s) → s)
   (km : (x : Type u) → (x → s) → m x → s)
   (kp : r → s)
   (p : Proxy a' a b' b m r) : s :=
-  let rec go [Inhabited s] : Proxy a' a b' b m r → s
-    | Proxy.Request a' fa  => ka a' (go ∘ fa)
-    | Proxy.Respond b fb'  => kb b (go ∘ fb')
-    | Proxy.M g h         => km _ (go ∘ g) h
-    | Proxy.Pure r        => kp r
-  go p
+  p kp ka kb (km _ id)
 
--- def Proxy.bind [Monad m]
---   (f : c → Proxy a' a b' b m d)
---   : Proxy a' a b' b m c → Proxy a' a b' b m d
---   | Proxy.Request a' fa  => Proxy.Request a' (Proxy.bind f ∘ fa)
---   | Proxy.Respond b fb'  => Proxy.Respond b (Proxy.bind f ∘ fb')
---   | Proxy.M g t         => Proxy.M (Proxy.bind f ∘ g) t
---   | Proxy.Pure r        => f r
-
--- Proxy bind operation
-def Proxy.bind [Monad m]
-  (f : c → Proxy a' a b' b m d)
-  (p0 : Proxy a' a b' b m c) :
+-- Bind operation
+@[inline] def Proxy.bind [Monad m]
+  (p0 : Proxy a' a b' b m c)
+  (f : c → Proxy a' a b' b m d) :
   Proxy a' a b' b m d :=
-  let rec go : Proxy a' a b' b m c → Proxy a' a b' b m d
-    | Proxy.Request a' fa  => Proxy.Request a' (go ∘ fa)
-    | Proxy.Respond b fb'  => Proxy.Respond b (go ∘ fb')
-    | Proxy.M f t         => Proxy.M (go ∘ f) t
-    | Proxy.Pure r        => f r
-  go p0
+  fun kp ka kb km =>
+    p0 (fun c => f c kp ka kb km) ka kb km
+@[inline] def Proxy.map [Monad m] (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+  Proxy.bind p (Proxy.Pure ∘ f)
+@[inline] def Proxy.seq [Monad m] (pf : Proxy a' a b' b m (r → s)) (px : Unit → Proxy a' a b' b m r) : Proxy a' a b' b m s := Proxy.bind pf (fun f => Proxy.map f (px ()))
+@[inline] def Proxy.request [Monad m] : a' -> Proxy a' a b' b m a := (Proxy.Request · Proxy.Pure)
+@[inline] def Proxy.respond [Monad m] : b -> Proxy a' a b' b m b' := (Proxy.Respond · Proxy.Pure)
+@[inline] def Proxy.monadLift [Functor m] : m x -> Proxy a' a b' b m x := Proxy.M
 
--- Functor instance
-instance [Monad m] : Functor (Proxy a' a b' b m) where
-  map f p := Proxy.bind (Proxy.Pure ∘ f) p
+@[inline] instance [Monad m] : Functor (Proxy a' a b' b m) := { map := Proxy.map }
+@[inline] instance [Monad m] : Pure (Proxy a' a b' b m) := ⟨Proxy.Pure⟩
+@[inline] instance [Monad m] : Seq (Proxy a' a b' b m) := ⟨Proxy.seq⟩
+@[inline] instance [Monad m] : Bind (Proxy a' a b' b m) := ⟨Proxy.bind⟩
+@[inline] instance [Monad m] : Monad (Proxy a' a b' b m) where
+@[inline] instance [Monad m] : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.monadLift⟩
 
--- Applicative instance
-instance [Monad m] : Pure (Proxy a' a b' b m) where
-  pure := Proxy.Pure
+instance [Monad m] : LawfulMonad (Proxy a' a b' b m) := LawfulMonad.mk'
+  (id_map := fun x => by rfl)
+  (pure_bind := fun _ _ => by rfl)
+  (bind_assoc := fun x _ _ => by rfl)
 
-instance [Monad m] : Seq (Proxy a' a b' b m) where
-  seq pf px := Proxy.bind (fun f => f <$> px ()) pf
-
--- Monad instance
-instance [Monad m] : Bind (Proxy a' a b' b m) where
-  bind p f := Proxy.bind f p
-
-instance [Monad m] : Monad (Proxy a' a b' b m) where
-
--- Basic operations
-def request [Monad m] (a' : a') : Proxy a' a b' b m a :=
-  Proxy.Request a' Proxy.Pure
-
-def respond [Monad m] (b : b) : Proxy a' a b' b m b' :=
-  Proxy.Respond b Proxy.Pure
-
-def monadLift [Monad m] (mx : m x) : Proxy a' a b' b m x :=
-  Proxy.M Proxy.Pure mx
-
--- MonadLift instance
-instance [Monad m] : MonadLift m (Proxy a' a b' b m) where
-  monadLift := monadLift
+instance [Monad m] : LawfulApplicative (Proxy a' a b' b m) := inferInstance
+instance [Monad m] : LawfulFunctor (Proxy a' a b' b m) := inferInstance
 
 -- Type aliases
 abbrev Effect      := Proxy Empty Unit Unit Empty
@@ -89,35 +71,51 @@ abbrev Client a' a := Proxy a' a Unit Empty
 abbrev Server b' b := Proxy Empty Unit b' b
 
 -- Kleisli composition for Proxy
-def kleisli_compose [Monad m]
+def Proxy.kleisli_compose [Monad m]
   (f : b → Proxy a' a b' b m c)
   (g : a → Proxy a' a b' b m b) :
   a → Proxy a' a b' b m c :=
-  fun a => g a >>= f
+  fun a => Proxy.bind (g a) f
 
--- Category instance would require more advanced category theory setup
--- which is beyond the scope of this basic translation
+-- From https://github.com/leanprover-community/mathlib4/blob/730e4db21155a3faee9cadd55d244dbf72f06391/Mathlib/Control/Combinators.lean#L14-L17
+@[always_inline, inline, simp] def Monad.joinM {m : Type u → Type u} [Monad m] {α : Type u} (a : m (m α)) : m α := bind a id
 
 -- Run functions
-def runEffect [Monad m] (eff : Effect m r) : m r :=
-  let rec go : Effect m r → m r
-    | Proxy.Request x _  => Empty.elim x
-    | Proxy.Respond x _  => Empty.elim x
-    | Proxy.M f mx      => mx >>= (go ∘ f)
-    | Proxy.Pure r      => pure r
-  go eff
+@[always_inline, inline] def Proxy.runEffect [Monad m] (eff : Effect m r) : m r :=
+  eff
+    pure                                   -- Handle Pure
+    (fun x _ => Empty.elim x)              -- Handle Request (impossible)
+    (fun x _ => Empty.elim x)              -- Handle Respond (impossible)
+    Monad.joinM                            -- Handle M
 
 -- Composition operations
-def composeResponse [Monad m]
+def Proxy.composeResponse [Monad m]
   (p0 : Proxy x' x b' b m a')
   (fb : b → Proxy x' x c' c m b') :
   Proxy x' x c' c m a' :=
-  let rec go : Proxy x' x b' b m a' → Proxy x' x c' c m a'
-    | Proxy.Request x' fx  => Proxy.Request x' (go ∘ fx)
-    | Proxy.Respond b fb'  => fb b >>= (go ∘ fb')
-    | Proxy.M f mx        => Proxy.M (go ∘ f) mx
-    | Proxy.Pure a        => Proxy.Pure a
-  go p0
+  fun kp ka kb km =>
+    p0 kp ka
+      (fun b k => fb b (fun b' => k b') ka kb km)
+      km
 
--- Proofs of laws would require more sophisticated proof techniques
--- and are omitted for brevity in this translation
+-- Additional utility functions
+def Proxy.yield [Monad m] : b -> Producer b m Unit := respond
+
+def Proxy.await [Monad m] : Consumer a m a := request ()
+
+partial def Proxy.cat [Monad m] [Inhabited r] : Pipe a a m r :=
+  fun kp ka kb km => ka () (fun a => kb a (fun _ => cat kp ka kb km))
+
+-- Pipe composition (left-to-right)
+def Proxy.pipeCompose [Monad m]
+  (p1 : Proxy a' a b' b m r)
+  (p2 : Proxy b' b c' c m r) :
+  Proxy a' a c' c m r :=
+  fun kp ka kb km =>
+    p1 kp ka
+      (fun _b k => p2 kp (fun b' _f => k b') kb km)
+      km
+
+def Proxy.forM [Monad m] (xs : List a) (f : a → Proxy x' x b' b m Unit) : Proxy x' x b' b m Unit :=
+  List.foldl (fun acc x kpure kreq kresp km =>
+    acc (fun _ => f x kpure kreq kresp km) kreq kresp km) (Proxy.Pure ()) xs
