@@ -117,12 +117,7 @@ instance : LawfulFunctor (Proxy a' a b' b m) := inferInstance
 
 infixl:60 " //> " => Proxy.forP
 
--- @[inline, simp] def Proxy.forPFunc
---   (f : a' → Proxy x' x b' b m a')
---   (g : b → Proxy x' x c' c m b') :
---   a' → Proxy x' x c' c m a' := (f · //> g)
-
-infixl:60 " />/ " => fun f g a => f a //> g -- Proxy.forPFunc
+infixl:60 " />/ " => fun f g a => f a //> g
 
 -- Backward composition (request category)
 
@@ -141,12 +136,7 @@ infixl:60 " />/ " => fun f g a => f a //> g -- Proxy.forPFunc
 
 infixl:60 " >\\\\ " => Proxy.rofP
 
--- @[inline, simp] def Proxy.rofPFunc
---   (f : b' → Proxy a' a y' y m b)
---   (g : c → Proxy b' b y' y m c) :
---   c → Proxy a' a y' y m c := (f >\\ g ·)
-
-infixl:60 " \\>\\ " => fun f g a => f >\\ g a -- Proxy.rofPFunc
+infixl:60 " \\>\\ " => fun f g a => f >\\ g a
 
 -- TODO: prove https://hackage.haskell.org/package/pipes-4.3.16/docs/src/Pipes.Core.html#push
 @[inline] partial def Proxy.push [Inhabited r] : a -> Proxy a' a a' a m r :=
@@ -179,13 +169,7 @@ end
 
 infixl:60 " >>~ " => fun x y => Proxy.pushR y x
 
--- @[inline] def Proxy.pushRFunc [Inhabited r]
---   (f : a → Proxy a' a b' b m r)
---   (g : b → Proxy b' b c' c m r) :
---   a → Proxy a' a c' c m r :=
---   (f · >>~ g)
-
-infixl:60 " >~> " => fun f g a => f a >>~ g -- Proxy.pushRFunc
+infixl:60 " >~> " => fun f g a => f a >>~ g
 
 @[inline] partial def Proxy.pull [Inhabited r] : a' -> Proxy a' a a' a m r :=
   (.Request · (.Respond · Proxy.pull))
@@ -215,14 +199,7 @@ end
 
 infixl:60 " +>> " => Proxy.pullR
 
--- @[inline] def Proxy.pullRFunc
---   [Inhabited r]
---   (f : b' → Proxy a' a b' b m r)
---   (g : b → Proxy b' b c' c m r) :
---   b → Proxy a' a c' c m r :=
---   fun a => Proxy.pullR f (g a)
-
-infixl:60 " >+> " => fun f g a => f +>> g a -- Proxy.pullR f (g a)
+infixl:60 " >+> " => fun f g a => f +>> g a
 
 -- Reflect operation (dual)
 def Proxy.reflect (p : Proxy a' a b' b m r) : Proxy b b' a a' m r :=
@@ -255,40 +232,34 @@ notation:60 x " //< " f => f >\\ x
 notation:60 f " ~<< " x => x >>~ f
 notation:60 x " <<+ " f => f +>> x
 
--- Utility functions
 def Proxy.yield : b -> Producer b m Unit := Proxy.respond
 
 def Proxy.await : Consumer a m a := Proxy.request ()
 
+-- TODO: this is like an identity pipe, should not be partial
 partial def Proxy.cat [Inhabited r] : Pipe a a m r :=
   .Request () (fun a => .Respond a (fun _ => Proxy.cat))
 
--- Convert list to producer
 def Proxy.fromList : List a → Producer a m Unit
 | []      => .Pure ()
 | (x::xs) => .Respond x (fun _ => fromList xs)
 
--- Convert array to producer
 def Proxy.fromArray : Array a -> Producer a m Unit :=
   fromList ∘ Array.toList
 
--- Filter pipe
 partial def Proxy.filter [Inhabited r] (p : a -> Bool) : Pipe a a m r :=
   .Request () (fun a =>
     if p a then .Respond a (fun _ => Proxy.filter p)
     else Proxy.filter p)
 
--- Take n elements
 def Proxy.take : Nat -> Pipe a a m Unit
   | 0 => .Pure ()
   | n+1 => .Request () (fun a => .Respond a (fun _ => Proxy.take n))
 
--- Drop n elements
 def Proxy.drop : Nat -> Pipe a a m Unit
   | 0 => Proxy.cat
   | n+1 => .Request () (fun _ => Proxy.drop n)
 
--- Enumerate with indices
 partial def Proxy.enumerateGo [Inhabited r] (i : Nat) : Pipe a (Nat × a) m r :=
   .Request () (fun a => .Respond (i, a) (fun _ => Proxy.enumerateGo (i + 1)))
 
@@ -320,27 +291,20 @@ def triple [Monad m] (x : a) : Producer a m Unit := do
   Proxy.yield x
   Proxy.yield x
 
--- Producer that creates numbers
 def numbers : List Nat → Producer Nat m Unit := Proxy.fromList
 
--- Example: filter even numbers
 def filterEven : Pipe Nat Nat m Unit := Proxy.filter (· % 2 = 0)
 
--- Example: take first 3
 def takeThree : Pipe Nat Nat m Unit := Proxy.take 3
 
--- Example: add 10 to each number
 def addTen : Pipe Nat Nat m Unit := Proxy.mapPipe (· + 10)
 
--- Example: enumerate
 def enumerateNat : Pipe Nat (Nat × Nat) m Unit := Proxy.enumerate
 
--- Consumer that collects into a list
 partial def toListConsumer [Inhabited a] : Consumer a (StateM (List a)) Unit :=
   .Request () (fun a =>
     .M (modify (fun acc => a :: acc)) (fun _ => toListConsumer))
 
--- Example pipeline
 -- def examplePipeline : Producer String m Unit :=
 --   numbers [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 --     //> filterEven
@@ -349,8 +313,8 @@ partial def toListConsumer [Inhabited a] : Consumer a (StateM (List a)) Unit :=
 
 end Examples
 
-@[inline]
-def Proxy.failure [Alternative m] : Proxy a' a b' b m r := Proxy.M Alternative.failure Proxy.Pure
+@[inline] def Proxy.failure [Alternative m] : Proxy a' a b' b m r := Proxy.M Alternative.failure Proxy.Pure
+
 -- https://github.com/Gabriella439/pipes/commit/08e7302f43dbf2a40bd367c5ee73ee3367e17768
 -- partial def Proxy.orElse [Monad m] [Alternative m]
 --   (x : Proxy a' a b' b m ret) (y : Unit → Proxy a' a b' b m ret) : Proxy a' a b' b m ret :=
@@ -365,7 +329,6 @@ def Proxy.failure [Alternative m] : Proxy a' a b' b m r := Proxy.M Alternative.f
 --     | .M mx k => .M (Alternative.orElse mx (fun _ => convertToM (y ()))) (fun x => go (k x))
 --     | .Pure xr => .Pure xr
 --   go x
---
 -- def Proxy.orElse [Monad m] [Alternative m]
 --   (x : Proxy a' a b' b m r) (y : Unit → Proxy a' a b' b m r) : Proxy a' a b' b m r :=
 --   match x with
@@ -390,7 +353,6 @@ def Proxy.failure [Alternative m] : Proxy a' a b' b m r := Proxy.M Alternative.f
 -- namespace AlternativeTest
 --   def testAlt1 : Proxy Empty Unit Unit Empty Option String := Proxy.failure
 --   def testAlt2 : Proxy Empty Unit Unit Empty Option String := Proxy.Pure "world"
---
 --   #check Proxy.runEffect testAlt1 = .none
 --   #check Proxy.runEffect testAlt2 = .some "world"
 -- end AlternativeTest
@@ -422,7 +384,6 @@ theorem respondDistrib [Monad m] [LawfulMonad m] (f : a → Proxy x' x b' b m a'
   | M mx ih =>
     simp [*]
 
---    -- Respond Category instance
 --    instance RespondCategory {x' x : Type u} :
 --      CategoryTheory.Category (Type u × Type u) where
 --      Hom A B := B.2 → Proxy x' x B.1 B.2 m A.1
@@ -431,12 +392,10 @@ theorem respondDistrib [Monad m] [LawfulMonad m] (f : a → Proxy x' x b' b m a'
 --      id_comp := by
 --        intro A B f
 --        funext z
---        -- Proof: right identity for respond
 --        aesop?
 --      comp_id := by
 --        intro A B f
 --        funext z
---        -- Proof: left identity for respond
 --        obtain ⟨fst, snd⟩ := A
 --        obtain ⟨fst_1, snd_1⟩ := B
 --        simp_all only
@@ -444,7 +403,6 @@ theorem respondDistrib [Monad m] [LawfulMonad m] (f : a → Proxy x' x b' b m a'
 --      assoc := by
 --        intro A B C D f g h
 --        funext z
---        -- Proof: associativity using respondDistrib
 --        obtain ⟨fst, snd⟩ := A
 --        obtain ⟨fst_1, snd_1⟩ := B
 --        obtain ⟨fst_2, snd_2⟩ := C
@@ -460,49 +418,41 @@ theorem respondZero  {a' a b' b c r : Type u} {m : Type u → Type u} (f : c →
 
 end RespondCategory
 
--- Request Category
 section RequestCategory
 
--- Request distributivity theorem
 theorem requestDistrib (f : c → Proxy b' b y' y m c')
                        (g : c' → Proxy b' b y' y m r)
                        (h : b' → Proxy a' a y' y m b) :
   h \>\ (f >=> g) = (h \>\ f) >=> (h \>\ g) := by
   funext x
-  -- The proof would involve induction on the structure of f x
   sorry
 
---    -- Request Category instance
---    instance RequestCategory {y' y : Type u} :
---      CategoryTheory.Category (Type u × Type u) where
---      Hom A B := A.1 → Proxy B.1 B.2 y' y m A.2
---      id A := Proxy.request
---      comp f g := f \>\ g
---      id_comp := by
---        intro A B f
---        funext z
---        -- Proof: right identity for request
---        aesop?
---      comp_id := by
---        intro A B f
---        funext z
---        -- Proof: left identity for request
---        obtain ⟨fst, snd⟩ := A
---        obtain ⟨fst_1, snd_1⟩ := B
---        simp_all only
---        sorry
---      assoc := by
---        intro A B C D f g h
---        funext z
---        -- Proof: associativity using requestDistrib
---        obtain ⟨fst, snd⟩ := A
---        obtain ⟨fst_1, snd_1⟩ := B
---        obtain ⟨fst_2, snd_2⟩ := C
---        obtain ⟨fst_3, snd_3⟩ := D
---        simp_all only
---        sorry
+--instance RequestCategory {y' y : Type u} :
+--  CategoryTheory.Category (Type u × Type u) where
+--  Hom A B := A.1 → Proxy B.1 B.2 y' y m A.2
+--  id A := Proxy.request
+--  comp f g := f \>\ g
+--  id_comp := by
+--    intro A B f
+--    funext z
+--    aesop?
+--  comp_id := by
+--    intro A B f
+--    funext z
+--    obtain ⟨fst, snd⟩ := A
+--    obtain ⟨fst_1, snd_1⟩ := B
+--    simp_all only
+--    sorry
+--  assoc := by
+--    intro A B C D f g h
+--    funext z
+--    obtain ⟨fst, snd⟩ := A
+--    obtain ⟨fst_1, snd_1⟩ := B
+--    obtain ⟨fst_2, snd_2⟩ := C
+--    obtain ⟨fst_3, snd_3⟩ := D
+--    simp_all only
+--    sorry
 
--- Request zero law
 lemma requestZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): Proxy.rofP f (.Pure someR) = .Pure someR := by rfl
 
 theorem requestZero (f : c → Proxy a' a b' b m r) :
@@ -511,26 +461,21 @@ theorem requestZero (f : c → Proxy a' a b' b m r) :
 
 end RequestCategory
 
--- Push Category
 section PushCategory
 
--- Helper lemmas for push
 theorem pushRequest [Inhabited r]
   (f : b → Proxy b' b c' c m r)
   (g : a → Proxy a' a b' b m r)
   (x : _) :
   Proxy.Request x g >>~ f = Proxy.Request x (g >~> f) := by
-  -- Proof would involve unfolding the definitions
   sorry
 
 theorem pushM [Inhabited r] (f : b → Proxy b' b c' c m r)
               (g : x → Proxy a' a b' b m r) (h : m x) :
   Proxy.M h g >>~ f = Proxy.M h (g >~> f) := by
   simp [Proxy.pushR]
-  -- Proof would involve unfolding the definitions
   sorry
 
--- Compromise module equivalent - we'll use assumptions about infinite recursion
 variable {n : ℕ} (hn : n > 0) {r : Type u} (d : r)
 
 -- Push Category instance
@@ -543,21 +488,18 @@ variable {n : ℕ} (hn : n > 0) {r : Type u} (d : r)
 --     intro A B f
 --     funext z
 --     simp [Proxy.pushRFunc, Proxy.push]
---     -- Proof: right identity for push
 --     simp_all only [gt_iff_lt]
 --     sorry
 --   comp_id := by
 --     intro A B f
 --     funext z
 --     simp [Proxy.pushRFunc, Proxy.push]
---     -- Proof: left identity for push
 --     simp_all only [gt_iff_lt]
 --     sorry
 --   assoc := by
 --     intro A B C D f g h
 --     funext z
 --     simp [Proxy.pushRFunc]
---     -- Proof: associativity for push
 --     simp_all only [gt_iff_lt]
 --     sorry
 
@@ -578,7 +520,6 @@ theorem pullM [Inhabited r] (f : b' → Proxy a' a b' b m r)
   simp [Proxy.pullR]
   sorry
 
--- Pull Category instance
 -- instance PullCategory [Inhabited r] :
 --   CategoryTheory.Category (Type u × Type u) where
 --   Hom A B := A.1 → Proxy B.1 B.2 A.1 A.2 m r
@@ -587,12 +528,10 @@ theorem pullM [Inhabited r] (f : b' → Proxy a' a b' b m r)
 --   id_comp := by
 --     intro A B f
 --     funext z
---     -- Proof: right identity for pull
 --     sorry
 --   comp_id := by
 --     intro A B f
 --     funext z
---     -- Proof: left identity for pull
 --     obtain ⟨fst, snd⟩ := A
 --     obtain ⟨fst_1, snd_1⟩ := B
 --     simp_all only
@@ -600,7 +539,6 @@ theorem pullM [Inhabited r] (f : b' → Proxy a' a b' b m r)
 --   assoc := by
 --     intro A B C D f g h
 --     funext z
---     -- Proof: associativity for pull
 --     obtain ⟨fst, snd⟩ := A
 --     obtain ⟨fst_1, snd_1⟩ := B
 --     obtain ⟨fst_2, snd_2⟩ := C
@@ -608,7 +546,6 @@ theorem pullM [Inhabited r] (f : b' → Proxy a' a b' b m r)
 --     simp_all only
 --     sorry
 
--- Push-Pull associativity
 theorem pushPullAssoc [Inhabited r]
   (f : b' → Proxy a' a b' b m r)
   (g : a → Proxy b' b c' c m r)
@@ -616,49 +553,39 @@ theorem pushPullAssoc [Inhabited r]
   (f >+> g) >~> h = f >+> (g >~> h) := by
   funext x
   simp [Proxy.pushR]
-  -- Proof would involve induction on the proxy structure
   sorry
 
 end PullCategory
 
--- Reflection (Duals)
 section Duals
 
 variable {a' a b' b r : Type u} {m : Type u → Type u}
 
--- Request identity via reflection
 theorem requestId : Proxy.reflect ∘ Proxy.request = @Proxy.respond a' a b' b m := by
   funext x
   simp [Proxy.reflect, Proxy.request, Proxy.respond]
 
--- Reflection distributes over bind
 theorem reflectDistrib (f : a → Proxy a' a b' b m r)
                        (g : r → Proxy a' a b' b m r) (x : a) :
   Proxy.reflect (f x >>= g) = Proxy.reflect (f x) >>= (Proxy.reflect ∘ g) := by
-  -- Proof would involve induction on f x
   sorry
 
--- Request composition via reflection
 theorem requestComp (f : a → Proxy a' a b' b m r)
                     (g : a → Proxy a r b' b m r) :
   Proxy.reflect ∘ (f \>\ g) = (Proxy.reflect ∘ g) />/ (Proxy.reflect ∘ f) := by
   simp [Proxy.bind, Proxy.reflect, Proxy.respond, Proxy.request, Proxy.rofP, Proxy.forP]
   funext x
-  -- Proof would use reflectDistrib
   sorry
 
--- Respond identity via reflection
 theorem respondId : Proxy.reflect ∘ Proxy.respond = @Proxy.request a' a b' b m := by
   funext x
   simp [Proxy.reflect, Proxy.respond, Proxy.request]
 
--- Respond composition via reflection
 theorem respondComp (f : a → Proxy a' a b' b m r)
                     (g : b → Proxy a' a b' b m b') :
   Proxy.reflect ∘ (f />/ g) = (Proxy.reflect ∘ g) \>\ (Proxy.reflect ∘ f) := by
   funext x
   simp [Proxy.reflect, Proxy.forP, Proxy.rofP]
-  -- Proof would involve induction and use of reflectDistrib
   induction (f x) with
   | Request a' k ih =>
     simp [Proxy.bind, Proxy.reflect]
@@ -674,16 +601,13 @@ theorem respondComp (f : a → Proxy a' a b' b m r)
   | Pure r =>
     simp [Proxy.bind, Proxy.reflect]
 
--- Distributivity corollary
 theorem distributivity (f : a → Proxy a' a b' b m r)
                        (g : r → Proxy a' a b' b m r) :
   Proxy.reflect ∘ (f >=> g) = (Proxy.reflect ∘ f) >=> (Proxy.reflect ∘ g) := by sorry -- reflectDistrib f g
 
--- Zero law for reflection
 theorem zeroLaw (x : r) : Proxy.reflect (pure x : Proxy a' a b' b m r) = (pure x : Proxy b b' a a' m r) := by
   simp [pure, Proxy.reflect]
 
--- Involution property
 theorem involution (p : Proxy a' a b' b m r) : Proxy.reflect (Proxy.reflect p) = p := by
   induction p with
   | Request xa' k ih =>
