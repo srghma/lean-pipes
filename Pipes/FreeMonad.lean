@@ -151,27 +151,22 @@ theorem F.ext
     apply funext; intro kf
     exact congrFun (congrFun (h r kp kf) kp) kf
 
-instance [Monad f] [Alternative f] [LawfulAlternative f] [LawfulMonad f] : LawfulAlternative (F f) where
-  map_failure g := by rfl
-  failure_seq x := by rfl
-  orElse_failure x := by
-    apply F.ext
-    intros r kp kf
-    simp [F.orElse, F.failure, F.runF, Alternative.orElse, Alternative.failure, Monad.joinM]
-    sorry
-
-  -- failure <|> y = y
-  failure_orElse y := by sorry
-
-  -- (x <|> y) <|> z = x <|> (y <|> z)
-  orElse_assoc x y z := by
-    cases x; cases y; cases z
-    sorry
-
-  -- map g (x <|> y) = map g x <|> map g y
-  map_orElse x y g := by
-    cases x; cases y;
-    sorry
+-- TODO: can be proved at all?
+-- instance [Monad f] [Alternative f] [LawfulAlternative f] [LawfulMonad f] : LawfulAlternative (F f) where
+--   map_failure g := by rfl
+--   failure_seq x := by rfl
+--   orElse_failure x := by
+--     apply F.ext
+--     intros r kp kf
+--     simp [F.orElse, F.failure, F.runF, Alternative.orElse, Alternative.failure, Monad.joinM]
+--     sorry
+--   failure_orElse y := by sorry
+--   orElse_assoc x y z := by
+--     cases x; cases y; cases z
+--     sorry
+--   map_orElse x y g := by
+--     cases x; cases y;
+--     sorry
 
 -- Properties and theorems
 namespace Properties

@@ -1,3 +1,5 @@
+import Pipes.Basic
+
 -- Producer that creates 5 numbers and stops
 def numberProducer : Producer Nat Id Unit :=
   fun _ka kb _km kp =>
@@ -27,17 +29,17 @@ def addTenToString' : Pipe Nat String Id Unit :=
 def concatConsumer : Consumer String (StateM String) Unit :=
   fun ka _kb km kp =>
     ka () (fun s =>
-      km Unit (fun _ => concatConsumer ka (fun x _ => Empty.elim x) km kp) 
+      km Unit (fun _ => concatConsumer ka (fun x _ => Empty.elim x) km kp)
              (modify (fun acc => acc ++ s)))
 
 -- Alternative consumer that returns the final result
 partial def concatConsumer' : Consumer String (StateM String) String :=
   fun ka _kb km kp =>
     ka () (fun s =>
-      km Unit (fun _ => 
+      km Unit (fun _ =>
         km String kp (do
           modify (fun acc => acc ++ s)
-          get)) 
+          get))
         (modify (fun acc => acc ++ s)))
 
 -- Simple fold-based consumer (more direct)
@@ -58,13 +60,13 @@ namespace PipelineTests
 
 -- Test individual components
 def testProducer : List Nat :=
-  let collectConsumer : Consumer Nat Id (List Nat) := 
+  let collectConsumer : Consumer Nat Id (List Nat) :=
     Proxy.fold (fun acc n => n :: acc) []
   Id.run $ Proxy.runEffect (numberProducer >-> collectConsumer)
 
 def testPipe : List String :=
   let testInput : Producer Nat Id Unit := Proxy.fromList [1, 2, 3]
-  let collectStrings : Consumer String Id (List String) := 
+  let collectStrings : Consumer String Id (List String) :=
     Proxy.fold (fun acc s => s :: acc) []
   Id.run $ Proxy.runEffect (testInput >-> (addTenToString >-> collectStrings))
 
@@ -82,13 +84,13 @@ namespace IdomaticVersion
 def producer : Producer Nat Id Unit := Proxy.fromList [1, 2, 3, 4, 5]
 
 -- Using mapM for transformation (if available)
-def transformPipe : Pipe Nat String Id Unit := 
+def transformPipe : Pipe Nat String Id Unit :=
   fun ka kb km kp =>
     ka () (fun n =>
       kb (toString (n + 10)) (fun _ =>
         transformPipe ka kb km kp))
 
--- Using fold for consumer  
+-- Using fold for consumer
 def consumer : Consumer String Id String :=
   Proxy.fold (fun acc s => acc ++ s) ""
 
@@ -106,14 +108,14 @@ end IdomaticVersion
 namespace CompositionExample
 
 def producer := Proxy.fromList [1, 2, 3, 4, 5]
-def transform : Nat → Pipe Nat String Id Unit := 
+def transform : Nat → Pipe Nat String Id Unit :=
   fun _ => addTenToString
 def consumer := Proxy.fold (fun acc s => acc ++ s) ""
 
--- Using forward composition //> 
+-- Using forward composition //>
 def composed1 := producer //> (fun n => transform n)
 
--- Using function composition />/ 
+-- Using function composition />/
 def composed2 := transform />/ (fun s => consumer)
 
 -- Pipeline using push composition >>~

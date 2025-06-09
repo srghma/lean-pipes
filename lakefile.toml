@@ -1,6 +1,10 @@
 name = "pipes"
 version = "0.1.0"
 defaultTargets = ["Pipes"]
+# moreLinkArgs = [
+#   "-L./.lake/packages/LeanCopilot/.lake/build/lib",
+#   "-lctranslate2",
+# ]
 
 [[lean_lib]]
 name = "Pipes"
@@ -13,6 +17,11 @@ scope = "leanprover-community"
 name = "batteries"
 scope = "leanprover-community"
 rev = "main"
+
+# [[require]]
+# name = "LeanCopilot"
+# git = "https://github.com/lean-dojo/LeanCopilot.git"
+# rev = "main"
 
 # [[lean_exe]]
 # name = "pipes"

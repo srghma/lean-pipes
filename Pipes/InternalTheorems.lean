@@ -3,10 +3,8 @@ import Batteries.Control.AlternativeMonad
 import Init.Control.State
 import Mathlib.CategoryTheory.Category.Basic
 import Mathlib.CategoryTheory.Functor.Basic
-import Mathlib.CategoryTheory.Monoidal.Basic
 import Mathlib.CategoryTheory.Types
-import Mathlib.Control.Monad.Basic
-import Pipes.Internal
+import Pipes.Basic
 
 open CategoryTheory
 
