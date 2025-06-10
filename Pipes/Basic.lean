@@ -142,8 +142,42 @@ infixl:60 " \\>\\ " => fun f g a => f >\\ g a
 @[inline] partial def Proxy.push [Inhabited r] : a -> Proxy a' a a' a m r :=
   (.Respond · (.Request · (Proxy.push)))
 
+private inductive ProxyPushRWF (a' a b' b c' c m r) where
+  | go : (b' → Proxy a' a b' b m r) → Proxy b' b c' c m r → ProxyPushRWF a' a b' b c' c m r
+  | reg : Proxy a' a b' b m r → ProxyPushRWF a' a b' b c' c m r
+
+private inductive ProxyPushRWFRel :
+    ProxyPushRWF a' a b' b c' c m r → ProxyPushRWF a' a b' b c' c m r → Prop where
+  | go_request : ProxyPushRWFRel (.reg (k xb')) (.go k (.Request xb' _kb))
+  | go_respond : ProxyPushRWFRel (.go k (kc' yc)) (.go k (.Respond xc kc'))
+  | go_m : ProxyPushRWFRel (.go k (kx x)) (.go k (.M mx kx))
+  | request : ProxyPushRWFRel (.reg (k a)) (.reg (.Request xa' k))
+  | m : ProxyPushRWFRel (.reg (k x)) (.reg (.M mx k))
+  | respond : ProxyPushRWFRel (.go k t) (.reg (.Respond xb k))
+
+private instance : WellFoundedRelation (ProxyPushRWF a' a b' b c' c m r) where
+  rel := ProxyPushRWFRel
+  wf := by
+    refine ⟨fun p => ?_⟩
+    have H1 (x k) (hk : ∀ y, Acc ProxyPushRWFRel (.reg (k y) : ProxyPushRWF a' a b' b c' c m r)) :
+        Acc ProxyPushRWFRel (.go k x : ProxyPushRWF a' a b' b c' c m r) := by
+      induction x with
+      | Request => exact ⟨_, fun | _, .go_request => hk _⟩
+      | Respond _ _ ih => exact ⟨_, fun | _, .go_respond => ih _⟩
+      | M _ _ ih => exact ⟨_, fun | _, .go_m => ih _⟩
+      | Pure => exact ⟨_, nofun⟩
+    have H2 (x) : Acc ProxyPushRWFRel (.reg x : ProxyPushRWF a' a b' b c' c m r) := by
+      induction x with
+      | Request _ _ ih => exact ⟨_, fun | _, .request => ih _⟩
+      | Respond _ _ ih => exact ⟨_, fun | _, .respond => H1 _ _ ih⟩
+      | M _ _ ih => exact ⟨_, fun | _, .m => ih _⟩
+      | Pure => exact ⟨_, nofun⟩
+    cases p with
+    | reg => exact H2 _
+    | go => exact H1 _ _ (fun _ => H2 _)
+
 mutual
-  @[inline] partial def Proxy.pushR.go' [Inhabited r]
+  @[inline] def Proxy.pushR.go' [Inhabited r]
     (fb : b → Proxy b' b c' c m r)
     (k : b' → Proxy a' a b' b m r)
     (p : Proxy b' b c' c m r)
@@ -153,9 +187,10 @@ mutual
     | .Respond xc kc' => .Respond xc (fun c' => Proxy.pushR.go' fb k (kc' c'))
     | .M mx kx => .M mx (fun x => Proxy.pushR.go' fb k (kx x))
     | .Pure xr => .Pure xr
-    -- termination_by sizeOf p
+    termination_by ProxyPushRWF.go k p
+    decreasing_by all_goals constructor
 
-  @[inline] partial def Proxy.pushR [Inhabited r]
+  @[inline] def Proxy.pushR [Inhabited r]
     (fb : b → Proxy b' b c' c m r)
     (p0 : Proxy a' a b' b m r) :
     Proxy a' a c' c m r :=
@@ -164,7 +199,8 @@ mutual
     | .Respond xb k => Proxy.pushR.go' fb k (fb xb)
     | .M mx k => .M mx (fun x => Proxy.pushR fb (k x))
     | .Pure xr => .Pure xr
-    -- termination_by sizeOf p0
+    termination_by (.reg p0 : ProxyPushRWF a' a b' b c' c m r)
+    decreasing_by all_goals constructor
 end
 
 infixl:60 " >>~ " => fun x y => Proxy.pushR y x
@@ -174,8 +210,41 @@ infixl:60 " >~> " => fun f g a => f a >>~ g
 @[inline] partial def Proxy.pull [Inhabited r] : a' -> Proxy a' a a' a m r :=
   (.Request · (.Respond · Proxy.pull))
 
+private inductive ProxyPullRWF (a' a b' b c' c m r) where
+  | go : (b → Proxy b' b c' c m r) → Proxy a' a b' b m r → ProxyPullRWF a' a b' b c' c m r
+  | reg : Proxy b' b c' c m r → ProxyPullRWF a' a b' b c' c m r
+
+private inductive ProxyPullRWFRel :
+    ProxyPullRWF a' a b' b c' c m r → ProxyPullRWF a' a b' b c' c m r → Prop where
+  | go_request : ProxyPullRWFRel (.go k (kc' yc)) (.go k (.Request xc kc'))
+  | go_respond : ProxyPullRWFRel (.reg (k xb')) (.go k (.Respond xb' _kb))
+  | go_m : ProxyPullRWFRel (.go k (kx x)) (.go k (.M mx kx))
+  | request : ProxyPullRWFRel (.go k t) (.reg (.Request xb k))
+  | respond : ProxyPullRWFRel (.reg (k a)) (.reg (.Respond xa' k))
+  | m : ProxyPullRWFRel (.reg (k x)) (.reg (.M mx k))
+
+private instance : WellFoundedRelation (ProxyPullRWF a' a b' b c' c m r) where
+  rel := ProxyPullRWFRel
+  wf :=
+    have H1 (x k) (hk : ∀ y, Acc ProxyPullRWFRel (.reg (k y) : ProxyPullRWF a' a b' b c' c m r)) :
+        Acc ProxyPullRWFRel (.go k x : ProxyPullRWF a' a b' b c' c m r) := by
+      induction x with
+      | Respond => exact ⟨_, fun | _, .go_respond => hk _⟩
+      | Request _ _ ih => exact ⟨_, fun | _, .go_request => ih _⟩
+      | M _ _ ih => exact ⟨_, fun | _, .go_m => ih _⟩
+      | Pure => exact ⟨_, nofun⟩
+    have H2 (x) : Acc ProxyPullRWFRel (.reg x : ProxyPullRWF a' a b' b c' c m r) := by
+      induction x with
+      | Respond _ _ ih => exact ⟨_, fun | _, .respond => ih _⟩
+      | Request _ _ ih => exact ⟨_, fun | _, .request => H1 _ _ ih⟩
+      | M _ _ ih => exact ⟨_, fun | _, .m => ih _⟩
+      | Pure => exact ⟨_, nofun⟩
+    ⟨fun
+      | .reg _ => H2 _
+      | .go .. => H1 _ _ (fun _ => H2 _)⟩
+
 mutual
-  @[inline] partial def Proxy.pullR.go' [Inhabited r]
+  @[inline] def Proxy.pullR.go' [Inhabited r]
     (fb' : b' → Proxy a' a b' b m r)
     (k : b → Proxy b' b c' c m r)
     (p : Proxy a' a b' b m r) :
@@ -185,8 +254,10 @@ mutual
     | .Respond xb _kb' => (k xb).pullR fb'
     | .M mx kx => .M mx (fun x => Proxy.pullR.go' fb' k (kx x))
     | .Pure xr => .Pure xr
+    termination_by ProxyPullRWF.go k p
+    decreasing_by all_goals constructor
 
-  @[inline] partial def Proxy.pullR [Inhabited r]
+  @[inline] def Proxy.pullR [Inhabited r]
     (fb' : b' → Proxy a' a b' b m r)
     (p0 : Proxy b' b c' c m r) :
     Proxy a' a c' c m r :=
@@ -195,6 +266,8 @@ mutual
     | .Respond xc k => .Respond xc (fun c' => (k c').pullR fb')
     | .M mx k => .M mx (fun x => (k x).pullR fb')
     | .Pure xr => .Pure xr
+    termination_by (.reg p0 : ProxyPullRWF a' a b' b c' c m r)
+    decreasing_by all_goals constructor
 end
 
 infixl:60 " +>> " => Proxy.pullR
