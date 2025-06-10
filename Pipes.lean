@@ -32,12 +32,12 @@ infixl:60 " <-< " => fun x y => Proxy.connect y x
 def Proxy.next
   [_root_.Pure m] [Bind m]
   (p : Producer a m r) :
-  m (Except r (a × (Unit → Producer a m r))) :=
+  m (r ⊕ (a × (Producer a m r))) :=
   match p with
   | Proxy.Request v _  => False.elim v
-  | Proxy.Respond a fu => pure (Except.ok (a, fun _ => fu ()))
+  | Proxy.Respond a fu => pure (Sum.inr (a, fun _ => fu ()))
   | Proxy.M mx k => mx >>= fun x => Proxy.next (k x)
-  | Proxy.Pure r => pure (Except.error r)
+  | Proxy.Pure r => pure (Sum.inl r)
 
 @[inline] def Proxy.cat (default : r) (fuel : Nat) : Pipe a a m r := Proxy.pull default fuel ()
 
