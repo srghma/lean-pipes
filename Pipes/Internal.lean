@@ -40,68 +40,6 @@ inductive Proxy.{u} (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : 
   | M       {x : Type u} (op : m x) (cont : x → Proxy a' a b' b m r) : Proxy a' a b' b m r
   | Pure    : r → Proxy a' a b' b m r
 
-abbrev Producer b  := Proxy Empty Unit Unit b
-
--- --- DISALLOWED NEXT
--- @[inline]
--- def Proxy.next
---   [_root_.Pure m] [Bind m]
---   (p : Producer a m r) :
---   m (r ⊕ (a × (Producer a m r))) :=
---   match p with
---   | Proxy.Request v _  => False.elim v
---   | Proxy.Respond a fu => pure (Sum.inr (a, fun _ => fu ()))
---   | Proxy.M mx k => mx >>= fun x => Proxy.next (k x)
---   | Proxy.Pure r => pure (Sum.inl r)
--- --- IDEA 1 : ProxyNextStep is just Proxy with disabled fields
--- inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
---   | Respond : b → (Unit → ProxyNextStep b m r) → ProxyNextStep b m r
---   | M {x : Type u} (op : m x) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
---   | Pure    : r → ProxyNextStep b m r
--- def ProxyNextStep.fromProducer [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
---   match p with
---   | Proxy.Request v _    => Empty.elim v
---   | Proxy.Respond b fu   => (ProxyNextStep.Respond b (fun _ => ProxyNextStep.fromProducer (fu ())))
---   | Proxy.M op cont      => (ProxyNextStep.M op ((fun x => ProxyNextStep.fromProducer (cont x))))
---   | Proxy.Pure r         => (ProxyNextStep.Pure r)
----- IDEA 2 : ProxyNextStep is more complex
--- inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
---   | Respond {x : Type u} (downstreamOutput : Option b) (op : m x) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
---   | Pure    : r → ProxyNextStep b m r
--- @[inline] def Proxy.next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
---   match p with
---   | Proxy.Request v _ => Empty.elim v
---   | Proxy.Respond b fu => ProxyNextStep.Respond (.some b) (pure ()) (fun _ => Proxy.next (fu ()))
---   | Proxy.M op cont => ProxyNextStep.Respond .none op (fun x => Proxy.next (cont x))
---   | Proxy.Pure r => ProxyNextStep.Pure r
---   termination_by structural p
----- IDEA 3 : Can move downstreamOutput to m? yes
--- inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
--- | Respond {x : Type u} (op : m (Option b × x)) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
--- | Pure    : r → ProxyNextStep b m r
--- @[inline]
--- def Proxy.next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
--- match p with
--- | Proxy.Request v _ => Empty.elim v
--- | Proxy.Respond b fu =>
---   ProxyNextStep.Respond (pure (some b, ())) (fun _ => Proxy.next (fu ()))
--- | Proxy.M op cont =>
---   ProxyNextStep.Respond (do
---     pure (none, (← op))
---   ) (fun x => Proxy.next (cont x))
--- | Proxy.Pure r => ProxyNextStep.Pure r
--- termination_by structural p
----- IDEA 4 : can I purge Option?
--- inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
---   | Respond {x : Type u} (downstreamOutput : b) (op : m x) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
---   | Pure    : r → ProxyNextStep b m r
-------- A: no
----- IDEA 5 : can I purge m?
--- inductive ProxyNextStep.{u} (b : Type u) (r : Type u) : Type u
--- | Respond {x : Type u} (op : (Option b × x)) (cont : x → ProxyNextStep b r) : ProxyNextStep b r
--- | Pure    : r → ProxyNextStep b r
-------- A: no, x doesnt allow
-
 instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
   default := .Pure default
 
