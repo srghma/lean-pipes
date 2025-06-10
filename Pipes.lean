@@ -28,17 +28,6 @@ def Proxy.connect
 infixl:60 " >-> " => Proxy.connect
 infixl:60 " <-< " => fun x y => Proxy.connect y x
 
-@[inline]
-def Proxy.next
-  [_root_.Pure m] [Bind m]
-  (p : Producer a m r) :
-  m (r ⊕ (a × (Producer a m r))) :=
-  match p with
-  | Proxy.Request v _  => False.elim v
-  | Proxy.Respond a fu => pure (Sum.inr (a, fun _ => fu ()))
-  | Proxy.M mx k => mx >>= fun x => Proxy.next (k x)
-  | Proxy.Pure r => pure (Sum.inl r)
-
 @[inline] def Proxy.cat (default : r) (fuel : Nat) : Pipe a a m r := Proxy.pull default fuel ()
 
 @[inline] def Proxy.cat_unbounded [Inhabited r] : Pipe a a m r := Proxy.pull_unbounded ()
@@ -83,35 +72,6 @@ def Proxy.next
   .Request () (fun a =>
     .M (MonadLift.monadLift (IO.println (toString a))) (fun _ =>
       .Respond a (fun _ => Proxy.print)))
-
-namespace Examples
-
-def triple [Monad m] (x : a) : Producer a m Unit := do
-  Proxy.yield x
-  Proxy.yield x
-  Proxy.yield x
-
-def numbers : List Nat → Producer Nat m Unit := Proxy.fromList
-
-def filterEven : Pipe Nat Nat m Unit := Proxy.filter (· % 2 = 0)
-
-def takeThree : Pipe Nat Nat m Unit := Proxy.take 3
-
-def addTen : Pipe Nat Nat m Unit := Proxy.mapPipe (· + 10)
-
-def enumerateNat : Pipe Nat (Nat × Nat) m Unit := Proxy.enumerate
-
-partial def toListConsumer [Inhabited a] : Consumer a (StateM (List a)) Unit :=
-  .Request () (fun a =>
-    .M (modify (fun acc => a :: acc)) (fun _ => toListConsumer))
-
--- def examplePipeline : Producer String m Unit :=
---   numbers [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
---     //> filterEven
---     //> takeThree
---     //> Proxy.mapPipe toString
-
-end Examples
 
 @[inline] def Proxy.failure [Alternative m] : Proxy a' a b' b m r := Proxy.M Alternative.failure Proxy.Pure
 
