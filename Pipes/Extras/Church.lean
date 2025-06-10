@@ -7,11 +7,7 @@
 - r  is the return type
 -/
 
-import Aesop
-import Init.Control.State
 import Batteries.Control.AlternativeMonad
-import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.CategoryTheory.Functor.Basic
 
 -- Church-encoded Proxy type
 @[inline, simp] def Proxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1) :=
@@ -107,33 +103,33 @@ def Proxy.orElse [Monad m] [Alternative m]
 @[inline] instance [MonadReader ρ m] : MonadReader ρ (Proxy a' a b' b m) where
   read := Proxy.M MonadReader.read
 
-instance [Monad m] [Alternative m] [LawfulAlternative m] : LawfulAlternative (Proxy a' a b' b m) where
-  map_failure g := by
-    funext ka kb km kp
-    dsimp [Functor.map, Proxy.map, Proxy.bind, Proxy.failure, Proxy.M, Proxy] at *
-    unfold Proxy.bind Proxy.Pure
-    simp only [Function.comp]
-    funext kp₁
-    dsimp [Functor.map, Proxy.map, Proxy.bind, Proxy.failure, Proxy.M, Proxy, Alternative.failure] at *
-    unfold Alternative.failure
-    sorry
-  failure_seq x := by sorry
-  map_orElse x y g := by rfl
-  orElse_failure x := by
-    funext ka kb km kp
-    dsimp [Functor.map, Proxy.map, Proxy.bind, Proxy.failure, Proxy.M, Proxy] at *
-    funext kp₁
-    dsimp [Functor.map, Proxy.map, Proxy.bind, Proxy.failure, Proxy.M, Proxy, Alternative.failure] at *
-    -- rw [LawfulAlternative.map_failure]
-    sorry
-
-  -- failure <|> y = y
-  failure_orElse y := by
-    sorry
-
-  -- (x <|> y) <|> z = x <|> (y <|> z)
-  orElse_assoc x y z := by
-    sorry
+-- instance [Monad m] [Alternative m] [LawfulAlternative m] : LawfulAlternative (Proxy a' a b' b m) where
+--   map_failure g := by
+--     funext ka kb km kp
+--     dsimp [Functor.map, Proxy.map, Proxy.bind, Proxy.failure, Proxy.M, Proxy] at *
+--     unfold Proxy.bind Proxy.Pure
+--     simp only [Function.comp]
+--     funext kp₁
+--     dsimp [Functor.map, Proxy.map, Proxy.bind, Proxy.failure, Proxy.M, Proxy, Alternative.failure] at *
+--     unfold Alternative.failure
+--     sorry
+--   failure_seq x := by sorry
+--   map_orElse x y g := by rfl
+--   orElse_failure x := by
+--     funext ka kb km kp
+--     dsimp [Functor.map, Proxy.map, Proxy.bind, Proxy.failure, Proxy.M, Proxy] at *
+--     funext kp₁
+--     dsimp [Functor.map, Proxy.map, Proxy.bind, Proxy.failure, Proxy.M, Proxy, Alternative.failure] at *
+--     -- rw [LawfulAlternative.map_failure]
+--     sorry
+--
+--   -- failure <|> y = y
+--   failure_orElse y := by
+--     sorry
+--
+--   -- (x <|> y) <|> z = x <|> (y <|> z)
+--   orElse_assoc x y z := by
+--     sorry
 
 -- Type aliases
 abbrev Effect      := Proxy Empty Unit Unit Empty
@@ -345,25 +341,25 @@ partial def Proxy.enumerateGo [Inhabited r]
 partial def Proxy.enumerate  [Inhabited r] : Pipe a (Nat × a) m r := Proxy.enumerateGo 0
 
 -- Zip two pipes together
-def Proxy.zip {a b r1 r2 m}
-  (p1 : Producer a m r1) (p2 : Producer b m r2) : Producer (a × b) m (Sum r1 r2) :=
-  fun ka kb kp kr =>
-    p1
-      (fun _xka xka =>
-        p2
-          (fun _xkb xkb => ?a)
-          (fun b k2 => ?b)
-          kp
-          (fun r2 => kr (Sum.inr r2)))
-      (fun a k1 => ?c)
-      kp
-      (fun r1 => kr (Sum.inl r1))
+-- def Proxy.zip {a b r1 r2 m}
+--   (p1 : Producer a m r1) (p2 : Producer b m r2) : Producer (a × b) m (Sum r1 r2) :=
+--   fun ka kb kp kr =>
+--     p1
+--       (fun _xka xka =>
+--         p2
+--           (fun _xkb xkb => ?a)
+--           (fun b k2 => ?b)
+--           kp
+--           (fun r2 => kr (Sum.inr r2)))
+--       (fun a k1 => ?c)
+--       kp
+--       (fun r1 => kr (Sum.inl r1))
 
 -- Interleave two producers
-def Proxy.interleave (p1 : Producer a m r) (p2 : Producer a m r) : Producer a m r :=
-  fun ka kb km kp =>
-    -- Alternate between p1 and p2
-    sorry
+-- def Proxy.interleave (p1 : Producer a m r) (p2 : Producer a m r) : Producer a m r :=
+--   fun ka kb km kp =>
+--     -- Alternate between p1 and p2
+--     sorry
 
 -- Duplicate a stream
 partial def Proxy.tee [Inhabited r] : Pipe a (a × a) m r :=
@@ -371,62 +367,62 @@ partial def Proxy.tee [Inhabited r] : Pipe a (a × a) m r :=
     ka () (fun a => kb (a, a) (fun _ => tee ka kb km kp))
 
 -- Buffer n elements
-partial def Proxy.buffer [Inhabited r] [Inhabited a] (n : Nat) : Pipe a (List a) m r :=
-  fun ka kb km kp =>
-    let rec go acc count :=
-      if count >= n then
-        kb acc.reverse (fun _ => go [] 0)
-      else
-        ka () (fun a => go (a :: acc) (count + 1))
-    go [] 0
+-- partial def Proxy.buffer [Inhabited r] [Inhabited a] (n : Nat) : Pipe a (List a) m r :=
+--   fun ka kb km kp =>
+--     let rec go acc count :=
+--       if count >= n then
+--         kb acc.reverse (fun _ => go [] 0)
+--       else
+--         ka () (fun a => go (a :: acc) (count + 1))
+--     go [] 0
 
 -- Group consecutive equal elements
-partial def Proxy.group [Inhabited r] [Inhabited a] [BEq a] : Pipe a (List a) m r :=
-  fun ka kb km kp =>
-    ka () (fun first =>
-      let rec collect current acc :=
-        ka () (fun a =>
-          if current == a then
-            collect current (a :: acc)
-          else
-            kb acc.reverse (fun _ => collect a [a]))
-      collect first [first])
+-- partial def Proxy.group [Inhabited r] [Inhabited a] [BEq a] : Pipe a (List a) m r :=
+--   fun ka kb km kp =>
+--     ka () (fun first =>
+--       let rec collect current acc :=
+--         ka () (fun a =>
+--           if current == a then
+--             collect current (a :: acc)
+--           else
+--            kb acc.reverse (fun _ => collect a [a]))
+--      collect first [first])
 
 -- Distinct/unique elements only
-partial def Proxy.distinct [BEq a] [Inhabited r] [Inhabited a] : Pipe a a m r :=
-  fun ka kb km kp =>
-    let rec go seen :=
-      ka () (fun a =>
-        if seen.contains a then
-          go seen
-        else
-          kb a (fun _ => go (a :: seen)))
-    go []
+-- partial def Proxy.distinct [BEq a] [Inhabited r] [Inhabited a] : Pipe a a m r :=
+--   fun ka kb km kp =>
+--     let rec go seen :=
+--       ka () (fun a =>
+--         if seen.contains a then
+--           go seen
+--         else
+--           kb a (fun _ => go (a :: seen)))
+--     go []
 
 -- Chain multiple pipes together
-def Proxy.chain (pipes : List (Pipe a a m Unit)) : Pipe a a m Unit :=
-  pipes.foldl (fun acc pipe =>
-    -- Compose pipes: acc >-> pipe
-    sorry) cat
+-- def Proxy.chain (pipes : List (Pipe a a m Unit)) : Pipe a a m Unit :=
+--   pipes.foldl (fun acc pipe =>
+--     -- Compose pipes: acc >-> pipe
+--     sorry) cat
 
 -- Repeat a producer infinitely
-partial def Proxy.repeatP [Inhabited r] [Inhabited a] (p : Producer a m Unit) : Producer a m r :=
-  fun ka kb km kp =>
-    let rec go :=
-      p ka kb km (fun _ => go)
-    go
+-- partial def Proxy.repeatP [Inhabited r] [Inhabited a] (p : Producer a m Unit) : Producer a m r :=
+--   fun ka kb km kp =>
+--     let rec go :=
+--       p ka kb km (fun _ => go)
+--     go
 
 -- Replicate an element n times
 def Proxy.replicate (n : Nat) (x : a) : Producer a m Unit :=
   fromList (List.replicate n x)
 
 -- Cycle through a list infinitely
-partial def Proxy.cycle [Inhabited r] [Inhabited a] : List a → Producer a m r
-| [] => Proxy.Pure (by simp) -- empty list case
-| xs =>
-  fun ka kb km kp =>
-    let rec go := Proxy.fromList xs ka kb km (fun _ => go)
-    go
+-- partial def Proxy.cycle [Inhabited r] [Inhabited a] : List a → Producer a m r
+-- | [] => Proxy.Pure (by simp) -- empty list case
+-- | xs =>
+--   fun ka kb km kp =>
+--     let rec go := Proxy.fromList xs ka kb km (fun _ => go)
+--     go
 
 -- Prepend an element to a producer
 def Proxy.cons (x : a) (p : Producer a m r) : Producer a m r :=
@@ -515,14 +511,12 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
   fun ka kb km kp =>
     p0 ka
       (fun b k =>
-        -- When p0 responds with b, we run fb b and handle its results
         fb b
-          (fun b' _k' => -- If fb b requests b', we call k b' to get the next state
-            -- We need to continue with what k produces after getting b'
+          (fun b' _k' =>
             k b')
-          kb  -- If fb b responds, pass it through
-          km  -- If fb b lifts, pass it through
-          kp) -- If fb b returns, pass it through
+          kb
+          km
+          kp)
       km
       kp
 
@@ -533,15 +527,7 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
   Proxy a' a c' c m r :=
   fun ka kb km kp =>
     p0
-      (fun b' k =>
-        -- When p0 requests b', we run fb' b' and handle its results
-        fb' b'
-          ka  -- If fb' b' requests, pass it through
-          (fun b _k' => -- If fb' b' responds with b, we call k b to get the next state
-            -- We need to continue with what k produces after providing b
-            k b)
-          km  -- If fb' b' lifts, pass it through
-          kp) -- If fb' b' returns, pass it through
+      (fun b' k => fb' b' ka (fun b _k' => k b) km kp)
       kb
       km
       kp
@@ -598,7 +584,7 @@ def Proxy.reflect [Monad m] (p : Proxy a' a b' b m r) : Proxy b b' a a' m r :=
     (pureHandler : r → x) =>
       p aHandler bHandler mHandler pureHandler
 
-namespace Proxy.CategoryLaws
+namespace ProxyCategoryLaws
 
 -- ============================================================================
 -- Respond Category Laws
@@ -610,54 +596,54 @@ section RespondCategory
 infixl:55  " >>= " => Proxy.bind
 
 -- Right identity law for respond category
-theorem respond_right_id (f : b → Proxy x' x a' a m b') :
-  f />/ Proxy.respond = f :=
-by
-  funext b
-  simp [Proxy.forPFunc, Proxy.forP, Proxy.respond, Proxy.Pure]
-  -- This follows from the fact that respond is the identity in the respond category
-  sorry
+-- theorem respond_right_id (f : b → Proxy x' x a' a m b') :
+--   f />/ Proxy.respond = f :=
+-- by
+--   funext b
+--   simp [Proxy.forPFunc, Proxy.forP, Proxy.respond, Proxy.Pure]
+--   -- This follows from the fact that respond is the identity in the respond category
+--   sorry
 
 -- Left identity law for respond category
-theorem respond_left_id (f : b → Proxy x' x a' a m b') :
-    Proxy.respond />/ f = f :=
-by
-  funext b
-  simp [Proxy.forPFunc, Proxy.forP, Proxy.respond, Proxy.Pure]
-  -- This is immediate from the definition
-  rfl
+-- theorem respond_left_id (f : b → Proxy x' x a' a m b') :
+--     Proxy.respond />/ f = f :=
+-- by
+--   funext b
+--   simp [Proxy.forPFunc, Proxy.forP, Proxy.respond, Proxy.Pure]
+--   -- This is immediate from the definition
+--   rfl
 
 -- Respond category composition distributes over Kleisli composition
-theorem respond_distrib (f : a → Proxy x' x b' b m a') (g : a' → Proxy x' x b' b m r)
-    (h : b → Proxy x' x c' c m b') :
-    (fun x => f x >>= g) />/ h = fun x => (f />/ h) x >>= (g />/ h) :=
-by
-  funext x
-  -- The proof involves showing that forP distributes over bind
-  -- This follows from the monad laws for Proxy
-  simp [Proxy.forPFunc, Proxy.forP, Proxy.bind]
-  sorry -- Detailed proof would involve induction on the Proxy structure
+-- theorem respond_distrib (f : a → Proxy x' x b' b m a') (g : a' → Proxy x' x b' b m r)
+--     (h : b → Proxy x' x c' c m b') :
+--     (fun x => f x >>= g) />/ h = fun x => (f />/ h) x >>= (g />/ h) :=
+-- by
+--   funext x
+--   -- The proof involves showing that forP distributes over bind
+--   -- This follows from the monad laws for Proxy
+--  simp [Proxy.forPFunc, Proxy.forP, Proxy.bind]
+--  sorry -- Detailed proof would involve induction on the Proxy structure
 
 
 -- Associativity law for respond category
-theorem respond_assoc
-  (f : a → Proxy x' x a' a m b')
-  (g : b' → Proxy x' x a' a m c')
-  (h : c' → Proxy x' x a' a m d') :
-  (f />/ g) />/ h = f />/ (g />/ h) :=
-by
-  funext a
-  simp [Proxy.forPFunc, Proxy.forP]
-  -- This follows from the associativity of the underlying composition
-  sorry
-
--- Zero law for respond category
-theorem respond_zero (f : c → Proxy a' a b' b m r) :
-    (fun _ => Proxy.Pure r) />/ f = fun _ => Proxy.Pure r :=
-by
-  funext c
-  simp [Proxy.forPFunc, Proxy.forP, Proxy.Pure]
-  rfl
+-- theorem respond_assoc
+--   (f : a → Proxy x' x a' a m b')
+--   (g : b' → Proxy x' x a' a m c')
+--   (h : c' → Proxy x' x a' a m d') :
+--   (f />/ g) />/ h = f />/ (g />/ h) :=
+-- by
+--   funext a
+--   simp [Proxy.forPFunc, Proxy.forP]
+--   -- This follows from the associativity of the underlying composition
+--   sorry
+--
+-- -- Zero law for respond category
+-- theorem respond_zero (f : c → Proxy a' a b' b m r) :
+--     (fun _ => Proxy.Pure r) />/ f = fun _ => Proxy.Pure r :=
+-- by
+--   funext c
+--   simp [Proxy.forPFunc, Proxy.forP, Proxy.Pure]
+--   rfl
 
 end RespondCategory
 
@@ -667,41 +653,41 @@ end RespondCategory
 
 section RequestCategory
 
-variable {x' x y' y a' a b' b c' c r : Type*}
+variable {x' x y' y a' a b' b c' c r : Type u}
 
--- Request category composition distributes over Kleisli composition
-theorem request_distrib (f : c → Proxy b' b y' y m c') (g : c' → Proxy b' b y' y m r)
-    (h : b' → Proxy a' a y' y m b) :
-    h \>\ (fun x => f x >>= g) = fun x => (h \>\ f) x >>= (h \>\ g) :=
-by
-  funext c
-  simp [Proxy.rofPFunc, Proxy.rofP, Proxy.bind]
-  sorry
-
--- Right identity law for request category
-theorem request_right_id (f : b' → Proxy a' a y' y m b) :
-    f \>\ (fun _ => Proxy.Pure r) = fun _ => Proxy.Pure r :=
-by
-  funext b'
-  simp [Proxy.rofPFunc, Proxy.rofP, Proxy.Pure]
-  sorry
-
--- Left identity law for request category
-theorem request_left_id (f : b' → Proxy a' a y' y m b) :
-    Proxy.request \>\ f = f :=
-by
-  funext b'
-  simp [Proxy.rofPFunc, Proxy.rofP, Proxy.request, Proxy.Pure]
-  sorry
-
--- Associativity law for request category
-theorem request_assoc (f : b' → Proxy a' a y' y m b) (g : a' → Proxy c' c y' y m a)
-    (h : c' → Proxy d' d y' y m c) :
-    f \>\ (g \>\ h) = (f \>\ g) \>\ h :=
-by
-  funext b'
-  simp [Proxy.rofPFunc, Proxy.rofP]
-  sorry
+-- -- Request category composition distributes over Kleisli composition
+-- theorem request_distrib (f : c → Proxy b' b y' y m c') (g : c' → Proxy b' b y' y m r)
+--     (h : b' → Proxy a' a y' y m b) :
+--     h \>\ (fun x => f x >>= g) = fun x => (h \>\ f) x >>= (h \>\ g) :=
+-- by
+--   funext c
+--   simp [Proxy.rofPFunc, Proxy.rofP, Proxy.bind]
+--   sorry
+--
+-- -- Right identity law for request category
+-- theorem request_right_id (f : b' → Proxy a' a y' y m b) :
+--     f \>\ (fun _ => Proxy.Pure r) = fun _ => Proxy.Pure r :=
+-- by
+--   funext b'
+--   simp [Proxy.rofPFunc, Proxy.rofP, Proxy.Pure]
+--   sorry
+--
+-- -- Left identity law for request category
+-- theorem request_left_id (f : b' → Proxy a' a y' y m b) :
+--     Proxy.request \>\ f = f :=
+-- by
+--   funext b'
+--   simp [Proxy.rofPFunc, Proxy.rofP, Proxy.request, Proxy.Pure]
+--   sorry
+--
+-- -- Associativity law for request category
+-- theorem request_assoc (f : b' → Proxy a' a y' y m b) (g : a' → Proxy c' c y' y m a)
+--     (h : c' → Proxy d' d y' y m c) :
+--     f \>\ (g \>\ h) = (f \>\ g) \>\ h :=
+-- by
+--   funext b'
+--   simp [Proxy.rofPFunc, Proxy.rofP]
+--   sorry
 
 end RequestCategory
 
@@ -711,32 +697,32 @@ end RequestCategory
 
 section PushCategory
 
-variable {a' a b' b c' c r : Type*}
+variable {a' a b' b c' c r : Type u}
 
 -- Right identity law for push category
-theorem push_right_id (f : b → Proxy b' b c' c m r) :
-    Proxy.Pure r >~> f = fun _ => Proxy.Pure r :=
-by
-  funext b
-  simp [Proxy.pushRFunc, Proxy.pushR, Proxy.Pure]
-  sorry
-
--- Left identity law for push category
-theorem push_left_id (f : a → Proxy a' a b' b m r) :
-    f >~> (fun _ => Proxy.Pure r) = fun _ => Proxy.Pure r :=
-by
-  funext a
-  simp [Proxy.pushRFunc, Proxy.pushR, Proxy.Pure]
-  sorry
-
--- Associativity law for push category
-theorem push_assoc (f : a → Proxy a' a b' b m r) (g : b → Proxy b' b c' c m r)
-    (h : c → Proxy c' c d' d m r) :
-    f >~> (g >~> h) = (f >~> g) >~> h :=
-by
-  funext a
-  simp [Proxy.pushRFunc, Proxy.pushR]
-  sorry
+-- theorem push_right_id (f : b → Proxy b' b c' c m r) :
+--     Proxy.Pure r >~> f = fun _ => Proxy.Pure r :=
+-- by
+--   funext b
+--   simp [Proxy.pushRFunc, Proxy.pushR, Proxy.Pure]
+--   sorry
+--
+-- -- Left identity law for push category
+-- theorem push_left_id (f : a → Proxy a' a b' b m r) :
+--     f >~> (fun _ => Proxy.Pure r) = fun _ => Proxy.Pure r :=
+-- by
+--   funext a
+--   simp [Proxy.pushRFunc, Proxy.pushR, Proxy.Pure]
+--   sorry
+--
+-- -- Associativity law for push category
+-- theorem push_assoc (f : a → Proxy a' a b' b m r) (g : b → Proxy b' b c' c m r)
+--     (h : c → Proxy c' c d' d m r) :
+--     f >~> (g >~> h) = (f >~> g) >~> h :=
+-- by
+--   funext a
+--   simp [Proxy.pushRFunc, Proxy.pushR]
+--   sorry
 
 end PushCategory
 
@@ -746,41 +732,41 @@ end PushCategory
 
 section PullCategory
 
-variable {a' a b' b c' c r : Type*}
+variable {a' a b' b c' c r : Type u}
 
 -- Right identity law for pull category
-theorem pull_right_id (f : b' → Proxy a' a b' b m r) :
-    f >+> (fun _ => Proxy.Pure r) = fun _ => Proxy.Pure r :=
-by
-  funext b'
-  simp [Proxy.pullRFunc, Proxy.pullR, Proxy.Pure]
-  sorry
-
--- Left identity law for pull category
-theorem pull_left_id (f : c' → Proxy b' b c' c m r) :
-    (fun _ => Proxy.Pure r) >+> f = fun _ => Proxy.Pure r :=
-by
-  funext c'
-  simp [Proxy.pullRFunc, Proxy.pullR, Proxy.Pure]
-  sorry
-
--- Associativity law for pull category
-theorem pull_assoc (f : b' → Proxy a' a b' b m r) (g : c' → Proxy b' b c' c m r)
-    (h : d' → Proxy c' c d' d m r) :
-    f >+> (g >+> h) = (f >+> g) >+> h :=
-by
-  funext b'
-  simp [Proxy.pullRFunc, Proxy.pullR]
-  sorry
-
--- Mixed associativity law (push and pull)
-theorem push_pull_assoc (f : b' → Proxy a' a b' b m r) (g : a → Proxy b' b c' c m r)
-    (h : c → Proxy c' c b' b m r) :
-    (f >+> g) >~> h = f >+> (g >~> h) :=
-by
-  funext b'
-  simp [Proxy.pullRFunc, Proxy.pushRFunc, Proxy.pullR, Proxy.pushR]
-  sorry
+-- theorem pull_right_id (f : b' → Proxy a' a b' b m r) :
+--     f >+> (fun _ => Proxy.Pure r) = fun _ => Proxy.Pure r :=
+-- by
+--   funext b'
+--   simp [Proxy.pullRFunc, Proxy.pullR, Proxy.Pure]
+--   sorry
+--
+-- -- Left identity law for pull category
+-- theorem pull_left_id (f : c' → Proxy b' b c' c m r) :
+--     (fun _ => Proxy.Pure r) >+> f = fun _ => Proxy.Pure r :=
+-- by
+--   funext c'
+--   simp [Proxy.pullRFunc, Proxy.pullR, Proxy.Pure]
+--   sorry
+--
+-- -- Associativity law for pull category
+-- theorem pull_assoc (f : b' → Proxy a' a b' b m r) (g : c' → Proxy b' b c' c m r)
+--     (h : d' → Proxy c' c d' d m r) :
+--     f >+> (g >+> h) = (f >+> g) >+> h :=
+-- by
+--   funext b'
+--   simp [Proxy.pullRFunc, Proxy.pullR]
+--   sorry
+--
+-- -- Mixed associativity law (push and pull)
+-- theorem push_pull_assoc (f : b' → Proxy a' a b' b m r) (g : a → Proxy b' b c' c m r)
+--     (h : c → Proxy c' c b' b m r) :
+--     (f >+> g) >~> h = f >+> (g >~> h) :=
+-- by
+--   funext b'
+--   simp [Proxy.pullRFunc, Proxy.pushRFunc, Proxy.pullR, Proxy.pushR]
+--   sorry
 
 end PullCategory
 
@@ -790,72 +776,72 @@ end PullCategory
 
 section ReflectionLaws
 
-variable {a' a b' b r : Type*}
+variable {a' a b' b r : Type u}
 
--- Reflect preserves composition structure
-theorem reflect_request_id :
-    (fun x => Proxy.reflect (Proxy.request x)) = @Proxy.respond a' a b' b m :=
-by
-  funext x
-  simp [Proxy.reflect, Proxy.request, Proxy.respond]
-  rfl
-
-theorem reflect_respond_id :
-    (fun x => Proxy.reflect (Proxy.respond x)) = @Proxy.request a' a b' b m :=
-by
-  funext x
-  simp [Proxy.reflect, Proxy.request, Proxy.respond]
-  rfl
-
--- Reflect distributes over bind
-theorem reflect_distrib (f : a → Proxy a' a b' b m r) (g : r → Proxy a' a b' b m r) (x : a) :
-    Proxy.reflect (f x >>= g) = Proxy.reflect (f x) >>= (Proxy.reflect ∘ g) :=
-by
-  simp [Proxy.reflect, Proxy.bind, Function.comp]
-  sorry
-
--- Reflect composition laws
-theorem reflect_request_comp (f : a → Proxy a' a b' b m r) (g : a → Proxy a r b' b m r) :
-    (fun x => Proxy.reflect (f \>\ g) x) =
-    (fun x => (Proxy.reflect ∘ g) />/ (Proxy.reflect ∘ f)) :=
-by
-  funext x
-  simp [Proxy.reflect, Proxy.rofPFunc, Proxy.forPFunc, Function.comp]
-  sorry
-
-theorem reflect_respond_comp (f : a → Proxy a' a b' b m r) (g : b → Proxy a' a b' b m b') :
-    (fun x => Proxy.reflect (f />/ g) x) =
-    (fun x => (Proxy.reflect ∘ g) \>\ (Proxy.reflect ∘ f)) :=
-by
-  funext x
-  simp [Proxy.reflect, Proxy.forPFunc, Proxy.rofPFunc, Function.comp]
-  sorry
-
--- Distributivity law for reflection
-theorem reflect_distributivity (f : a → Proxy a' a b' b m r) (g : r → Proxy a' a b' b m r) :
-    (fun x => Proxy.reflect ((f >=> g) x)) =
-    (fun x => ((Proxy.reflect ∘ f) >=> (Proxy.reflect ∘ g)) x) :=
-by
-  funext x
-  simp [Function.comp, Monad.kleisliRight]
-  exact reflect_distrib f g x
-
--- Zero law for reflection
-theorem reflect_zero :
-    @Proxy.reflect m _ a' a b' b r ∘ Proxy.Pure = Proxy.Pure :=
-by
-  funext r
-  simp [Proxy.reflect, Proxy.Pure, Function.comp]
-  rfl
-
--- Involution law (reflect is its own inverse)
-theorem reflect_involution :
-    @Proxy.reflect m _ a' a b' b r ∘ Proxy.reflect = id :=
-by
-  funext p
-  simp [Proxy.reflect, Function.comp, id]
-  -- This requires structural induction on the Proxy
-  sorry
+-- -- Reflect preserves composition structure
+-- theorem reflect_request_id :
+--     (fun x => Proxy.reflect (Proxy.request x)) = @Proxy.respond a' a b' b m :=
+-- by
+--   funext x
+--   simp [Proxy.reflect, Proxy.request, Proxy.respond]
+--   rfl
+--
+-- theorem reflect_respond_id :
+--     (fun x => Proxy.reflect (Proxy.respond x)) = @Proxy.request a' a b' b m :=
+-- by
+--   funext x
+--   simp [Proxy.reflect, Proxy.request, Proxy.respond]
+--   rfl
+--
+-- -- Reflect distributes over bind
+-- theorem reflect_distrib (f : a → Proxy a' a b' b m r) (g : r → Proxy a' a b' b m r) (x : a) :
+--     Proxy.reflect (f x >>= g) = Proxy.reflect (f x) >>= (Proxy.reflect ∘ g) :=
+-- by
+--   simp [Proxy.reflect, Proxy.bind, Function.comp]
+--   sorry
+--
+-- -- Reflect composition laws
+-- theorem reflect_request_comp (f : a → Proxy a' a b' b m r) (g : a → Proxy a r b' b m r) :
+--     (fun x => Proxy.reflect (f \>\ g) x) =
+--     (fun x => (Proxy.reflect ∘ g) />/ (Proxy.reflect ∘ f)) :=
+-- by
+--   funext x
+--   simp [Proxy.reflect, Proxy.rofPFunc, Proxy.forPFunc, Function.comp]
+--   sorry
+--
+-- theorem reflect_respond_comp (f : a → Proxy a' a b' b m r) (g : b → Proxy a' a b' b m b') :
+--     (fun x => Proxy.reflect (f />/ g) x) =
+--     (fun x => (Proxy.reflect ∘ g) \>\ (Proxy.reflect ∘ f)) :=
+-- by
+--   funext x
+--   simp [Proxy.reflect, Proxy.forPFunc, Proxy.rofPFunc, Function.comp]
+--   sorry
+--
+-- -- Distributivity law for reflection
+-- theorem reflect_distributivity (f : a → Proxy a' a b' b m r) (g : r → Proxy a' a b' b m r) :
+--     (fun x => Proxy.reflect ((f >=> g) x)) =
+--     (fun x => ((Proxy.reflect ∘ f) >=> (Proxy.reflect ∘ g)) x) :=
+-- by
+--   funext x
+--   simp [Function.comp, Monad.kleisliRight]
+--   exact reflect_distrib f g x
+--
+-- -- Zero law for reflection
+-- theorem reflect_zero :
+--     @Proxy.reflect m _ a' a b' b r ∘ Proxy.Pure = Proxy.Pure :=
+-- by
+--   funext r
+--   simp [Proxy.reflect, Proxy.Pure, Function.comp]
+--   rfl
+--
+-- -- Involution law (reflect is its own inverse)
+-- theorem reflect_involution :
+--     @Proxy.reflect m _ a' a b' b r ∘ Proxy.reflect = id :=
+-- by
+--   funext p
+--   simp [Proxy.reflect, Function.comp, id]
+--   -- This requires structural induction on the Proxy
+--   sorry
 
 end ReflectionLaws
 
@@ -865,20 +851,20 @@ end ReflectionLaws
 
 section CategoryInstance
 
--- We can define the Respond category as a Category Theory category
-instance RespondCategory {x' x : Type*} : CategoryTheory.Category (Type* × Type*) where
-  Hom := fun A B => B.2 → Proxy x' x A.1 A.2 m B.1
-  id := fun A => @Proxy.respond x' x A.1 A.2 m
-  comp := fun f g => g />/ f
-  id_comp := by
-    intro A B f
-    exact respond_left_id f
-  comp_id := by
-    intro A B f
-    exact respond_right_id f
-  assoc := by
-    intro A B C D f g h
-    exact (respond_assoc h g f).symm
+-- -- We can define the Respond category as a Category Theory category
+-- instance RespondCategory {x' x : Type u} : CategoryTheory.Category (Type u × Type u) where
+--   Hom := fun A B => B.2 → Proxy x' x A.1 A.2 m B.1
+--   id := fun A => @Proxy.respond x' x A.1 A.2 m
+--   comp := fun f g => g />/ f
+--   id_comp := by
+--     intro A B f
+--     exact respond_left_id f
+--   comp_id := by
+--     intro A B f
+--     exact respond_right_id f
+--   assoc := by
+--     intro A B C D f g h
+--     exact (respond_assoc h g f).symm
 
 end CategoryInstance
 
@@ -888,36 +874,36 @@ end CategoryInstance
 
 section UtilityTheorems
 
--- Composition with pure
-theorem comp_pure_left {f : b → Proxy x' x c' c m b'} :
-    (fun _ => Proxy.Pure r) />/ f = fun _ => Proxy.Pure r :=
-respond_zero f
-
-theorem comp_pure_right {f : b → Proxy x' x a' a m b'} :
-    f />/ (fun _ => Proxy.Pure r) = fun _ => f _ >>= (fun _ => Proxy.Pure r) :=
-by
-  funext b
-  simp [Proxy.forPFunc, Proxy.forP, Proxy.Pure, Proxy.bind]
-  sorry
+-- -- Composition with pure
+-- theorem comp_pure_left {f : b → Proxy x' x c' c m b'} :
+--     (fun _ => Proxy.Pure r) />/ f = fun _ => Proxy.Pure r :=
+-- respond_zero f
+--
+-- theorem comp_pure_right {f : b → Proxy x' x a' a m b'} :
+--     f />/ (fun _ => Proxy.Pure r) = fun _ => f _ >>= (fun _ => Proxy.Pure r) :=
+-- by
+--   funext b
+--   simp [Proxy.forPFunc, Proxy.forP, Proxy.Pure, Proxy.bind]
+--   sorry
 
 -- Properties of request and respond
 theorem request_pure_eq :
     Proxy.request >=> Proxy.Pure = @Proxy.request a' a b' b m :=
 by
   funext a'
-  simp [Monad.kleisliRight, Proxy.request, Proxy.Pure, Proxy.bind]
+  simp [Proxy.request, Proxy.Pure, Proxy.bind]
   rfl
 
 theorem respond_pure_eq :
     Proxy.respond >=> Proxy.Pure = @Proxy.respond a' a b' b m :=
 by
   funext b
-  simp [Monad.kleisliRight, Proxy.respond, Proxy.Pure, Proxy.bind]
+  simp [Proxy.respond, Proxy.Pure, Proxy.bind]
   rfl
 
 end UtilityTheorems
 
-end Proxy.CategoryLaws
+end ProxyCategoryLaws
 
 ----------------- namespace Examples1
 ----------------- -- Suppose we have some simple Producers (e.g., Source) and Pipes (e.g., Transform)

@@ -1,0 +1,122 @@
+/-
+- a' is the type of values flowing upstream (input)
+- a  is the type of values flowing downstream (input)
+- b' is the type of values flowing upstream (output)
+- b  is the type of values flowing downstream (output)
+- m  is the base monad
+- r  is the return type
+-/
+
+-- import Aesop
+import Mathlib.CategoryTheory.Category.Basic
+
+inductive Proxy.{u} (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
+  | Request : a' → (a → Proxy a' a b' b m r) → Proxy a' a b' b m r
+  | Respond : b → (b' → Proxy a' a b' b m r) → Proxy a' a b' b m r
+  | M       {x : Type u} (op : m x) (cont : x → Proxy a' a b' b m r) : Proxy a' a b' b m r
+  | Pure    : r → Proxy a' a b' b m r
+
+instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
+  default := .Pure default
+
+-- Fundamental code to operate with Proxy
+@[inline] def foldProxy
+  {s : Type v}
+  (ka : a' → (a → s) → s)
+  (kb : b → (b' → s) → s)
+  (km : ∀ {x : Type u}, m x → (x → s) → s)
+  (kp : r → s)
+  (proxy : Proxy a' a b' b m r) : s :=
+  match proxy with
+  | .Request xa' k => ka xa' (fun a => foldProxy ka kb km kp (k a))
+  | .Respond xb k => kb xb (fun b' => foldProxy ka kb km kp (k b'))
+  | .M mx k => km mx (fun x => foldProxy ka kb km kp (k x))
+  | .Pure xr => kp xr
+  termination_by structural proxy
+
+-- This is equivalent to [foldProxy Request Respond (fun _ => M)], but using
+-- that definition makes some proofs harder.
+-- NOTE: in coq diff order of args
+@[inline, simp] def Proxy.bind
+  (p0 : Proxy a' a b' b m c)
+  (f : c → Proxy a' a b' b m d) :
+  Proxy a' a b' b m d :=
+  match p0 with
+  | .Request xa' k => .Request xa' (fun a => (k a).bind f)
+  | .Respond xb k => .Respond xb (fun b' => (k b').bind f)
+  | .M mx k => .M mx (fun x => (k x).bind f)
+  | .Pure xc => f xc
+
+@[inline, simp] abbrev Proxy.map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+  Proxy.bind p (Proxy.Pure ∘ f)
+
+@[inline] instance : Functor (Proxy a' a b' b m) := { map := Proxy.map }
+
+@[inline, simp] abbrev Proxy.seq (pf : Proxy a' a b' b m (r → s)) (px : Unit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+  Proxy.bind pf (Proxy.map · (px ()))
+
+@[inline] instance : Pure (Proxy a' a b' b m) := ⟨Proxy.Pure⟩
+@[inline] instance : Seq (Proxy a' a b' b m) := ⟨Proxy.seq⟩
+@[inline] instance : Bind (Proxy a' a b' b m) := ⟨Proxy.bind⟩
+@[inline] instance : Monad (Proxy a' a b' b m) where
+
+@[inline, simp] abbrev Proxy.monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure
+
+@[inline] instance : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.monadLift⟩
+
+@[inline] instance [MonadState σ m] : MonadState σ (Proxy a' a b' b m) where
+  get := Proxy.monadLift MonadState.get
+  set := Proxy.monadLift ∘ MonadState.set
+  modifyGet := Proxy.monadLift ∘ MonadState.modifyGet
+
+@[inline] instance [MonadReader ρ m] : MonadReader ρ (Proxy a' a b' b m) where
+  read := Proxy.monadLift MonadReader.read
+
+-------------------------------------------
+
+instance : LawfulMonad (Proxy a' a b' b m) := LawfulMonad.mk'
+  (id_map := by
+    intro α x
+    induction x with
+    | Request a' k ih => simp [Functor.map]; funext a; exact ih a
+    | Respond b k ih => simp [Functor.map]; funext b'; exact ih b'
+    | M mx k ih => simp [Functor.map]; funext x; exact ih x
+    | Pure r => rfl
+  )
+  (pure_bind := by intro α β x f; rfl)
+  (bind_assoc := by
+    intro α β γ x f g
+    induction x with
+    | Request a' k ih => simp [Bind.bind]; funext a; exact ih a;
+    | Respond b k ih => simp [Bind.bind]; funext b'; exact ih b';
+    | M mx k ih => simp [Bind.bind]; funext x; exact ih x;
+    | Pure r => rfl
+  )
+
+instance : LawfulApplicative (Proxy a' a b' b m) := inferInstance
+instance : LawfulFunctor (Proxy a' a b' b m) := inferInstance
+
+namespace PipesLawsInternal
+
+def ProxyKleisliCategory
+  {a' a b' b : Type u}
+  {m : Type u → Type u}
+  [Monad m]
+  [LawfulMonad m]
+  : CategoryTheory.Category (Type u) where
+  Hom A B := A → Proxy a' a b' b m B
+  id A := pure
+  comp f g := fun x => (f >=> g) x
+  id_comp := by
+    intros X Y f
+    funext x
+    rfl
+  comp_id := by
+    intros X Y f
+    funext x
+    simp [Bind.bind, Pure.pure]
+    sorry
+  assoc := by
+    intros X Y Z W f g h
+    funext x
+    sorry
