@@ -173,7 +173,7 @@ namespace AlternativeTest
   -- #guard Proxy.runEffect (testAlt1 <|> testAlt2) = Proxy.runEffect testAlt2
 end AlternativeTest
 
--- Composition operations
+-- Composition operations == forP
 @[inline] def Proxy.composeProxy
   (p0 :     Proxy x' x b' b m a')
   (fb : b → Proxy x' x c' c m b') :
@@ -188,9 +188,6 @@ end AlternativeTest
     (fb : b → Proxy x' x c' c m b')
     (p0 :     Proxy x' x b' b m a') :
               Proxy x' x c' c m a' := Proxy.composeProxy p0 fb
-
-infixl:60 " >c> " => Proxy.composeProxy
-infixl:60 " <c< " => Proxy.composeProxyFlipped
 
 -- Now let's fix the connectProducerConsumer with the correct parameter order
 -- partial def Proxy.connectProducerConsumer
@@ -319,12 +316,12 @@ partial def Proxy.scan [Inhabited r]
 private partial def Proxy.fold (f : s → a → s) (acc : s) : Consumer a m s := Proxy.Request () fun a => Proxy.fold f (f acc a)
 
 -- Convert list to producer
-def Proxy.fromList : List a → Producer a m Unit
+def Proxy.fromList : List b → Producer b m Unit
 | []      => Proxy.Pure ()
 | (x::xs) => Proxy.Respond x (fun _ => fromList xs)
 
 -- Convert array to producer
-def Proxy.fromArray : Array a -> Producer a m Unit :=
+def Proxy.fromArray : Array b -> Producer b m Unit :=
   fromList ∘ Array.toList
 
 -- Collect all values into a list
@@ -342,7 +339,7 @@ partial def Proxy.enumerate  [Inhabited r] : Pipe a (Nat × a) m r := Proxy.enum
 
 -- Zip two pipes together
 -- def Proxy.zip {a b r1 r2 m}
---   (p1 : Producer a m r1) (p2 : Producer b m r2) : Producer (a × b) m (Sum r1 r2) :=
+--   (p1 : Producer b m r1) (p2 : Producer b m r2) : Producer (a × b) m (Sum r1 r2) :=
 --   fun ka kb kp kr =>
 --     p1
 --       (fun _xka xka =>
@@ -356,7 +353,7 @@ partial def Proxy.enumerate  [Inhabited r] : Pipe a (Nat × a) m r := Proxy.enum
 --       (fun r1 => kr (Sum.inl r1))
 
 -- Interleave two producers
--- def Proxy.interleave (p1 : Producer a m r) (p2 : Producer a m r) : Producer a m r :=
+-- def Proxy.interleave (p1 : Producer b m r) (p2 : Producer b m r) : Producer b m r :=
 --   fun ka kb km kp =>
 --     -- Alternate between p1 and p2
 --     sorry
@@ -406,18 +403,18 @@ partial def Proxy.tee [Inhabited r] : Pipe a (a × a) m r :=
 --     sorry) cat
 
 -- Repeat a producer infinitely
--- partial def Proxy.repeatP [Inhabited r] [Inhabited a] (p : Producer a m Unit) : Producer a m r :=
+-- partial def Proxy.repeatP [Inhabited r] [Inhabited a] (p : Producer b m Unit) : Producer b m r :=
 --   fun ka kb km kp =>
 --     let rec go :=
 --       p ka kb km (fun _ => go)
 --     go
 
 -- Replicate an element n times
-def Proxy.replicate (n : Nat) (x : a) : Producer a m Unit :=
+def Proxy.replicate (n : Nat) (x : b) : Producer b m Unit :=
   fromList (List.replicate n x)
 
 -- Cycle through a list infinitely
--- partial def Proxy.cycle [Inhabited r] [Inhabited a] : List a → Producer a m r
+-- partial def Proxy.cycle [Inhabited r] [Inhabited a] : List a → Producer b m r
 -- | [] => Proxy.Pure (by simp) -- empty list case
 -- | xs =>
 --   fun ka kb km kp =>
@@ -425,12 +422,12 @@ def Proxy.replicate (n : Nat) (x : a) : Producer a m Unit :=
 --     go
 
 -- Prepend an element to a producer
-def Proxy.cons (x : a) (p : Producer a m r) : Producer a m r :=
+def Proxy.cons (x : b) (p : Producer b m r) : Producer b m r :=
   fun ka kb km kp =>
     kb x (fun _ => p ka kb km kp)
 
 -- Append an element to a producer
-def Proxy.snoc  (p : Producer a m Unit) (x : a) : Producer a m Unit :=
+def Proxy.snoc  (p : Producer b m Unit) (x : b) : Producer b m Unit :=
   fun ka kb km kp =>
     p ka kb km (fun _ => kb x (fun _ => kp ()))
 

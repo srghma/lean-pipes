@@ -43,6 +43,8 @@ inductive Proxy.{u} (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : 
 instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
   default := .Pure default
 
+namespace Proxy
+
 -- Fundamental code to operate with Proxy
 @[inline] def foldProxy
   {s : Type v}
@@ -61,7 +63,7 @@ instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
 -- This is equivalent to [foldProxy Request Respond (fun _ => M)], but using
 -- that definition makes some proofs harder.
 -- NOTE: in coq diff order of args
-@[inline, simp] def Proxy.bind
+@[inline, simp] def bind
   (p0 : Proxy a' a b' b m c)
   (f : c → Proxy a' a b' b m d) :
   Proxy a' a b' b m d :=
@@ -71,20 +73,21 @@ instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
   | .M mx k => .M mx (fun x => (k x).bind f)
   | .Pure xc => f xc
 
-@[inline, simp] abbrev Proxy.map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
-  Proxy.bind p (Proxy.Pure ∘ f)
+@[inline, simp] abbrev map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+  Proxy.bind p (fun val => Proxy.Pure (f val))
 
-@[inline] instance : Functor (Proxy a' a b' b m) := { map := Proxy.map }
-
-@[inline, simp] abbrev Proxy.seq (pf : Proxy a' a b' b m (r → s)) (px : Unit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+@[inline, simp] abbrev seq (pf : Proxy a' a b' b m (r → s)) (px : Unit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
   Proxy.bind pf (Proxy.map · (px ()))
 
+@[inline, simp] abbrev monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure
+
+end Proxy
+
+@[inline] instance : Functor (Proxy a' a b' b m) := { map := Proxy.map }
 @[inline] instance : Pure (Proxy a' a b' b m) := ⟨Proxy.Pure⟩
 @[inline] instance : Seq (Proxy a' a b' b m) := ⟨Proxy.seq⟩
 @[inline] instance : Bind (Proxy a' a b' b m) := ⟨Proxy.bind⟩
 @[inline] instance : Monad (Proxy a' a b' b m) where
-
-@[inline, simp] abbrev Proxy.monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure
 
 @[inline] instance : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.monadLift⟩
 
@@ -120,7 +123,7 @@ instance : LawfulMonad (Proxy a' a b' b m) := LawfulMonad.mk'
 instance : LawfulApplicative (Proxy a' a b' b m) := inferInstance
 instance : LawfulFunctor (Proxy a' a b' b m) := inferInstance
 
-namespace PipesLawsInternal
+namespace Proxy.PipesLawsInternal
 
 def ProxyKleisliCategory
   {a' a b' b : Type u}

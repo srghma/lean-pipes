@@ -6,7 +6,7 @@ open IO
 
 namespace Examples
 
-def triple [Monad m] (x : a) : Producer a m Unit := do
+def triple [Monad m] (x : a) : Producer b m Unit := do
   Proxy.yield x
   Proxy.yield x
   Proxy.yield x
