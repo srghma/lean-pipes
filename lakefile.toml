@@ -23,6 +23,7 @@ rev = "main"
 # git = "https://github.com/lean-dojo/LeanCopilot.git"
 # rev = "main"
 
-# [[lean_exe]]
-# name = "pipes"
-# root = "Main"
+# lake exe test-pipes
+[[lean_exe]]
+name = "test-pipes"
+root = "Main"

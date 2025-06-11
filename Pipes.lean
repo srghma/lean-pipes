@@ -11,6 +11,8 @@ import Mathlib.CategoryTheory.Functor.Basic
 
 namespace Proxy
 
+-- implementation is same as `respond`, but cannot use `:= respond`
+-- @[inline, simp] abbrev yield : b -> Producer_ b m PUnit := (Respond · Proxy.Pure)
 @[inline, simp] abbrev yield : b -> Proxy a' a PUnit b m PUnit := respond
 
 infixl:70 " ~> " => fun f g => f />/ g
@@ -19,7 +21,8 @@ infixl:70 " <~ " => fun f g => g />/ f
 notation:70 x " >~ " y => (fun (_ : PUnit) => x) >\\ y
 notation:70 x " ~< " y => y >~ x
 
-def await : Proxy PUnit a b' b m a := request ()
+-- @[inline, simp] abbrev await : Consumer_ a m a := request ()
+@[inline, simp] abbrev await : Proxy PUnit a b' b m a := request ()
 
 @[inline] def Fueled.cat (default : r) (fuel : Nat) : Pipe a a m r := Fueled.pull default fuel ()
 
@@ -100,6 +103,7 @@ inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : 
 @[inline] def every (xs : List b) : Producer b m PUnit :=
   xs.foldlM (fun _ x => respond x) ()
 
+namespace PipesForLaws
 theorem for_yield_f (f : b → Proxy x' x c' c m PUnit) (x_val : b) :
   yield x_val //> f = f x_val := by
   simp only [forP, Proxy.yield, Proxy.respond]
@@ -107,7 +111,7 @@ theorem for_yield_f (f : b → Proxy x' x c' c m PUnit) (x_val : b) :
 
 theorem for_yield (s : Proxy x' x PUnit b m PUnit) :
   s //> yield = s := by
-  simp only [forP, Proxy.yield, Proxy.respond]
+  simp only [Proxy.forP, Proxy.yield, Proxy.respond]
   sorry
 
 theorem nested_for_a
@@ -125,6 +129,8 @@ theorem nested_for_b
   -- forP (Proxy.forP s f) g = Proxy.forP s (f />/ g) := by
   ((s //> f) //> g) = (s //> (f />/ g)) := by
   rw [nested_for_a]
+
+end PipesForLaws
 
 --------------------------
 
@@ -146,14 +152,14 @@ theorem nested_for_b
 
 -- In coq - just `map`, bad name
 @[inline] def Fueled.mapPipe (d : r) (fuel : Nat) (f : a → b) : Pipe a b m r :=
-  forP (Proxy.Fueled.cat d fuel) (fun val => Proxy.respond (f val))
-  -- match fuel with
-  -- | 0     => .Pure d
-  -- | fuel' + 1 => .Request .unit (fun a => .Respond (f a) (fun _ => Fueled.mapPipe d fuel' f))
+  -- forP (Proxy.Fueled.cat d fuel) (fun val => Proxy.respond (f val))
+  match fuel with
+  | 0     => .Pure d
+  | fuel' + 1 => .Request .unit (fun a => .Respond (f a) (fun _ => Fueled.mapPipe d fuel' f))
 
 @[inline] partial def Unbounded.mapPipe [Inhabited r] (f : a → b) : Pipe a b m r :=
-  -- forP (Proxy.Unbounded.cat) (fun val => Proxy.respond (f val))
-  .Request () (fun a => .Respond (f a) (fun _ => mapPipe f))
+  forP (Proxy.Unbounded.cat) (fun val => Proxy.respond (f val))
+  -- .Request () (fun a => .Respond (f a) (fun _ => mapPipe f))
 
 -- In coq - just `mapM`, bad name
 @[inline] def Pipe.Fueled.mapM [Monad m] (f : a → m b) (d : r) (fuel : Nat) : Pipe a b m r :=
@@ -245,6 +251,10 @@ theorem nested_for_b
 @[inline] def take : Nat -> Pipe a a m PUnit
   | 0 => .Pure ()
   | n+1 => .Request () (fun a => .Respond a (fun _ => take n))
+
+-- @[inline] def take : Nat → Pipe a a m PUnit
+--   | 0    => .Pure ()
+--   | n+1  => Proxy.await >>= fun a => do Proxy.yield a; (take n)
 
 @[inline] def Fueled.takeWhile (p : a → Bool) (d : r) (fuel : Nat) : Pipe a a m PUnit :=
   match fuel with
@@ -562,7 +572,7 @@ match p with
 @[inline] def toList : Producer b Id PUnit -> List b
   | Request v _ => PEmpty.elim v
   | Pure _ => []
-  | Respond a_val fu => a_val :: toList (fu ⟨⟩)
+  | Respond a_val fu => a_val :: toList (fu .unit)
   | M mx k => toList (k (Id.run mx))
 
 @[inline] def toListM [Monad m] : Producer b m PUnit → m (List b)
@@ -731,11 +741,14 @@ partial def Unbounded.repeatP
 --   #check runEffect testAlt2 = .some "world"
 -- end AlternativeTest
 
+end Proxy
 --------------------------------------------------------------------------------
 -- Theorems from PipesLawsPrelude
 --------------------------------------------------------------------------------
 
 namespace PipesLawsPrelude
+
+open Proxy
 
 lemma for_yield_general (s : Proxy x' x PUnit b m r) :
   s //> (respond : b → Proxy x' x PUnit b m PUnit) = s := by
@@ -746,8 +759,8 @@ lemma for_yield_general (s : Proxy x' x PUnit b m r) :
     funext a_val
     exact ih a_val
   | Respond xb k ih =>
-    simp only [forP, respond, Bind.bind]
-    simp_all only [bind]
+    simp only [Proxy.forP, Proxy.respond, Bind.bind]
+    simp_all only [Proxy.bind]
   | M mx k ih =>
     simp only [forP, respond]
     congr
@@ -758,11 +771,8 @@ lemma for_yield_general (s : Proxy x' x PUnit b m r) :
 
 theorem map_id {a : Type} (d : r) (fuel : Nat) :
   Fueled.mapPipe (a := a) (b := a) (m := m) d fuel (fun x => x) = Fueled.cat d fuel := by
-  apply for_yield_general
-
-namespace Fueled
-
-end Fueled
+  -- apply for_yield_general
+  sorry
 
 theorem map_compose
   {m : Type → Type} (d : r) (fuel : Nat)
@@ -772,7 +782,7 @@ theorem map_compose
       >-> Fueled.mapPipe (m := m) d fuel g := by
         unfold Fueled.mapPipe
         simp only [Function.comp]
-        simp_all only [respond]
+        -- simp_all only [Proxy.respond]
         sorry
 
 theorem toListM_each_id {a : Type 0} {m : Type 0 -> Type 0} [Monad m] (xs : List a) :

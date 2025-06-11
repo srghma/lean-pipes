@@ -74,7 +74,6 @@ instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
 --         | isFalse h => isFalse (by intro h'; injection h' with h₁ _; exact h h₁)
 --     | _, _ => isFalse (by intro h; cases h)
 
-
 namespace Proxy
 
 -- Fundamental code to operate with Proxy
@@ -105,10 +104,10 @@ namespace Proxy
   | .M mx k => .M mx (fun x => (k x).bind f)
   | .Pure xc => f xc
 
-@[inline, simp] abbrev map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+@[inline, simp] private abbrev map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
   Proxy.bind p (fun val => Proxy.Pure (f val))
 
-@[inline, simp] abbrev seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+@[inline, simp] private abbrev seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
   Proxy.bind pf (Proxy.map · (px ()))
 
 @[inline, simp] abbrev monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure
@@ -120,7 +119,6 @@ end Proxy
 @[inline] instance : Seq (Proxy a' a b' b m) := ⟨Proxy.seq⟩
 @[inline] instance : Bind (Proxy a' a b' b m) := ⟨Proxy.bind⟩
 @[inline] instance : Monad (Proxy a' a b' b m) where
-
 @[inline] instance : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.monadLift⟩
 
 @[inline] instance [MonadState σ m] : MonadState σ (Proxy a' a b' b m) where
