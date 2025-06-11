@@ -41,7 +41,7 @@ infixl:60 " <-< " => fun x y => connect y x
 --   (p : Producer b m r) :
 --   m (r ⊕ (a × (Producer b m r))) :=
 --   match p with
---   | Request v _  => Empty.elim v
+--   | Request v _  => PEmpty.elim v
 --   | Respond a fu => pure (Sum.inr (a, fun _ => fu ()))
 --   | M mx k => mx >>= fun x => Proxy.next (k x)
 --   | Pure r => pure (Sum.inl r)
@@ -52,36 +52,36 @@ infixl:60 " <-< " => fun x y => connect y x
 --   | Pure    : r → ProxyNextStep b m r
 -- def ProxyNextStep.fromProducer [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
 --   match p with
---   | Request v _    => Empty.elim v
+--   | Request v _    => PEmpty.elim v
 --   | Respond b fu   => (ProxyNextStep.Respond b (fun _ => ProxyNextStep.fromProducer (fu ())))
 --   | M op cont      => (ProxyNextStep.M op ((fun x => ProxyNextStep.fromProducer (cont x))))
 --   | Pure r         => (ProxyNextStep.Pure r)
----- IDEA 2 : ProxyNextStep is more complex
--- inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
---   | Respond {x : Type u} (downstreamOutput : Option b) (op : m x) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
---   | Pure    : r → ProxyNextStep b m r
--- @[inline] def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
---   match p with
---   | Request v _ => Empty.elim v
---   | Respond b fu => ProxyNextStep.Respond (.some b) (pure ()) (fun _ => Proxy.next (fu ()))
---   | M op cont => ProxyNextStep.Respond .none op (fun x => Proxy.next (cont x))
---   | Pure r => ProxyNextStep.Pure r
---   termination_by structural p
----- IDEA 3 : Can move downstreamOutput to m? yes
+---- IDEA 2 : ProxyNextStep is more complex (this idea is most clean)
 inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
-  | Respond {x : Type u} (op : m (Option b × x)) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
+  | Respond {x : Type u} (downstreamOutput : Option b) (op : m x) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
   | Pure    : r → ProxyNextStep b m r
 @[inline] def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
   match p with
   | Request v _ => PEmpty.elim v
-  | Respond b fu =>
-    ProxyNextStep.Respond (pure (some b, ())) (fun _ => next (fu ()))
-  | M op cont =>
-    ProxyNextStep.Respond (do
-      pure (none, (← op))
-    ) (fun x => next (cont x))
+  | Respond b fu => ProxyNextStep.Respond (.some b) (pure ()) (fun _ => Proxy.next (fu ()))
+  | M op cont => ProxyNextStep.Respond .none op (fun x => Proxy.next (cont x))
   | Pure r => ProxyNextStep.Pure r
   termination_by structural p
+---- IDEA 3 : Can move downstreamOutput to m? yes
+-- inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
+--   | Respond {x : Type u} (op : m (Option b × x)) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
+--   | Pure    : r → ProxyNextStep b m r
+-- @[inline] def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
+--   match p with
+--   | Request v _ => PEmpty.elim v
+--   | Respond b fu =>
+--     ProxyNextStep.Respond (pure (some b, ())) (fun _ => next (fu ()))
+--   | M op cont =>
+--     ProxyNextStep.Respond (do
+--       pure (none, (← op))
+--     ) (fun x => next (cont x))
+--   | Pure r => ProxyNextStep.Pure r
+--   termination_by structural p
 ---- IDEA 4 : can I purge Option?
 -- inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
 --   | Respond {x : Type u} (downstreamOutput : b) (op : m x) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
@@ -172,10 +172,10 @@ theorem nested_for_b
 @[inline] partial def Pipe.Unbounded.mapM [Inhabited r] (f : a -> m b) : Pipe a b m r :=
   .Request () (fun a => .M (f a) (fun b => .Respond b (fun _ => mapM f)))
 
-@[inline] def Fueled.mapM_ [Monad m] (f : a → m Unit) (d : r) (fuel : Nat) : Consumer a m r :=
+@[inline] def Fueled.mapM_ [Monad m] (f : a → m PUnit) (d : r) (fuel : Nat) : Consumer a m r :=
   forP (Proxy.Fueled.cat d fuel) (fun val => monadLift (f val))
 
-@[inline] partial def Unbounded.mapM_ [Inhabited r] (f : a → m Unit) : Consumer a m r :=
+@[inline] partial def Unbounded.mapM_ [Inhabited r] (f : a → m PUnit) : Consumer a m r :=
   forP Proxy.Unbounded.cat (fun val => monadLift (f val))
   -- .Request ?? (fun a => .M (f a) (fun _ => Unbounded.mapM_ f))
 
@@ -268,7 +268,7 @@ theorem nested_for_b
   | 0 => Unbounded.cat
   | n+1 => .Request () (fun _ => Unbounded.drop n)
 
--- partial def Proxy.dropWhile (p : a -> Bool) : Pipe a a m Unit :=
+-- partial def Proxy.dropWhile (p : a -> Bool) : Pipe a a m PUnit :=
 
 @[inline] def Fueled.concat (d : r) (fuel : Nat) : Pipe (List a) a m r :=
   forP (Proxy.Fueled.cat d fuel) (·.forM Proxy.respond)
@@ -634,7 +634,7 @@ match p with
   fromList ∘ Array.toList
 
 -- Replicate an element n times
-@[inline] def replicate (n : Nat) (x : b) : Producer b m Unit := fromList (List.replicate n x)
+@[inline] def replicate (n : Nat) (x : b) : Producer b m PUnit := fromList (List.replicate n x)
 
 @[inline] partial def enumerate.go [Inhabited r] (i : Nat) : Pipe a (Nat × a) m r :=
   .Request () (fun a => .Respond (i, a) (fun _ => go (i + 1)))
@@ -672,7 +672,7 @@ partial def Unbounded.cycle [Inhabited r] [Inhabited a] (xs : List a) : Producer
   | y::ys  => Respond y (fun _ => cycle (ys ++ [y]))
 
 -- Interleave two producers round-robin
--- partial def Unbounded.interleave (p1 p2 : Producer b m Unit) : Producer b m Unit :=
+-- partial def Unbounded.interleave (p1 p2 : Producer b m PUnit) : Producer b m PUnit :=
 --   match p1 with
 --   | Respond x k => Respond x (fun _ => interleave p2 (k ()))
 --   | M mx k      => M (mx.map fun ⟨p1'⟩ => p1') fun p1' => interleave p1' p2
@@ -696,8 +696,8 @@ partial def Unbounded.distinct [BEq a] [Inhabited r] : Pipe a a m r :=
 
 -- Repeat a producer infinitely
 partial def Unbounded.repeatP
-  (p : Producer b m Unit) : Producer b m Unit :=
-  let rec go : Producer b m Unit :=
+  (p : Producer b m PUnit) : Producer b m PUnit :=
+  let rec go : Producer b m PUnit :=
     p *> go
   go
 
@@ -725,8 +725,8 @@ partial def Unbounded.repeatP
 --   failure_orElse y := by sorry
 --   orElse_assoc x y z := by sorry
 -- namespace AlternativeTest
---   def testAlt1 : Proxy Empty PUnit PUnit Empty Option String := failure
---   def testAlt2 : Proxy Empty PUnit PUnit Empty Option String := Pure "world"
+--   def testAlt1 : Proxy PEmpty PUnit PUnit PEmpty Option String := failure
+--   def testAlt2 : Proxy PEmpty PUnit PUnit PEmpty Option String := Pure "world"
 --   #check runEffect testAlt1 = .none
 --   #check runEffect testAlt2 = .some "world"
 -- end AlternativeTest

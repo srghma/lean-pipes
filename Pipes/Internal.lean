@@ -76,7 +76,7 @@ namespace Proxy
 @[inline, simp] abbrev map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
   Proxy.bind p (fun val => Proxy.Pure (f val))
 
-@[inline, simp] abbrev seq (pf : Proxy a' a b' b m (r → s)) (px : Unit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+@[inline, simp] abbrev seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
   Proxy.bind pf (Proxy.map · (px ()))
 
 @[inline, simp] abbrev monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure

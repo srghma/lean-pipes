@@ -55,7 +55,7 @@ lean_lib Pipes {
 -- --   IO.println "generating import list"
 -- --   return 0
 --
--- target updateTestMain : Unit := do
+-- target updateTestMain : PUnit := do
 --   IO.println "generating import list"
 --
 --   -- Create the Test directory if it doesn't exist
@@ -66,7 +66,7 @@ lean_lib Pipes {
 --   let mainContent :=
 --   "import LSpec
 --
---   def main : IO Unit := do
+--   def main : IO PUnit := do
 --     IO.println \"running test1\"
 --     -- Add your test logic here
 --   "

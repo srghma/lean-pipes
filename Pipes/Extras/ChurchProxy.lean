@@ -49,7 +49,7 @@ import Batteries.Control.AlternativeMonad
     p0 ka kb km (fun c => f c ka kb km kp)
 
 @[inline, simp] def Proxy.map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s := Proxy.bind p (Proxy.Pure ∘ f)
-@[inline, simp] def Proxy.seq (pf : Proxy a' a b' b m (r → s)) (px : Unit → Proxy a' a b' b m r) : Proxy a' a b' b m s := Proxy.bind pf (Proxy.map · (px ()))
+@[inline, simp] def Proxy.seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s := Proxy.bind pf (Proxy.map · (px ()))
 @[inline, simp] def Proxy.request : a' -> Proxy a' a b' b m a := (Proxy.Request · Proxy.Pure)
 @[inline, simp] def Proxy.respond : b -> Proxy a' a b' b m b' := (Proxy.Respond · Proxy.Pure)
 
@@ -78,14 +78,14 @@ def Proxy.failure [Alternative m] : Proxy a' a b' b m r :=
 
 @[inline, simp]
 def Proxy.orElse [Monad m] [Alternative m]
-  (x : Proxy a' a b' b m ret) (y : Unit → Proxy a' a b' b m ret) : Proxy a' a b' b m ret :=
+  (x : Proxy a' a b' b m ret) (y : PUnit → Proxy a' a b' b m ret) : Proxy a' a b' b m ret :=
   fun {result} _ka _kb km kp =>
     let mx : m result := x
       (fun _ _ => Alternative.failure)
       (fun _ _ => Alternative.failure)
       (fun _ f mt => mt >>= f)
       (fun a => pure (kp a))
-    let my : Unit -> m result := fun _ => y ()
+    let my : PUnit -> m result := fun _ => y ()
       (fun _ _ => Alternative.failure)
       (fun _ _ => Alternative.failure)
       (fun _ f mt => mt >>= f)
@@ -132,16 +132,16 @@ def Proxy.orElse [Monad m] [Alternative m]
 --     sorry
 
 -- Type aliases
-abbrev Effect      := Proxy Empty Unit Unit Empty
-abbrev Producer b  := Proxy Empty Unit Unit b
-abbrev Pipe a b    := Proxy Unit a Unit b -- downstream input -> downstream output
-abbrev Consumer a  := Proxy Unit a Unit Empty
-abbrev Client a' a := Proxy a' a Unit Empty
-abbrev Server b' b := Proxy Empty Unit b' b
+abbrev Effect      := Proxy PEmpty PUnit PUnit PEmpty
+abbrev Producer b  := Proxy PEmpty PUnit PUnit b
+abbrev Pipe a b    := Proxy PUnit a PUnit b -- downstream input -> downstream output
+abbrev Consumer a  := Proxy PUnit a PUnit PEmpty
+abbrev Client a' a := Proxy a' a PUnit PEmpty
+abbrev Server b' b := Proxy PEmpty PUnit b' b
 
 abbrev Effect_        m r := forall {a' a b' b}, Proxy a'   a b'   b m r
-abbrev Producer_ b    m r := forall {a' a},      Proxy a'   a Unit b m r
-abbrev Consumer_ a    m r := forall {b' b},      Proxy Unit a b'   b m r
+abbrev Producer_ b    m r := forall {a' a},      Proxy a'   a PUnit b m r
+abbrev Consumer_ a    m r := forall {b' b},      Proxy PUnit a b'   b m r
 abbrev Server_   b' b m r := forall {a' a},      Proxy a'   a b'   b m r
 abbrev Client_   a' a m r := forall {b' b},      Proxy a'   a b'   b m r
 
@@ -155,14 +155,14 @@ def Proxy.kleisli_compose
 -- Run functions
 @[always_inline, inline] def Proxy.runEffect [Monad m] (eff : Effect m r) : m r :=
   eff
-    (fun x _ => Empty.elim x)              -- Handle Request (impossible)
-    (fun x _ => Empty.elim x)              -- Handle Respond (impossible)
+    (fun x _ => PEmpty.elim x)              -- Handle Request (impossible)
+    (fun x _ => PEmpty.elim x)              -- Handle Respond (impossible)
     (fun _ f mt => mt >>= f)               -- Handle M
     pure                                   -- Handle Pure
 
 namespace AlternativeTest
-  def testAlt1 : Proxy Empty Unit Unit Empty Option String := Proxy.failure
-  def testAlt2 : Proxy Empty Unit Unit Empty Option String := Proxy.Pure $ "world"
+  def testAlt1 : Proxy PEmpty PUnit PUnit PEmpty Option String := Proxy.failure
+  def testAlt2 : Proxy PEmpty PUnit PUnit PEmpty Option String := Proxy.Pure $ "world"
 
   #guard Proxy.runEffect testAlt1 = .none
   #guard Proxy.runEffect testAlt2 = .some "world"
@@ -195,14 +195,14 @@ end AlternativeTest
 --   (consumer : Consumer b m r) :
 --   Effect m r := fun {result} kaemptyHandler kbemptyHandler km kp =>
 --     producer
---       Empty.elim
+--       PEmpty.elim
 --       (fun xb cont_prod =>                  -- Producer yields xb
 --         consumer
 --           (fun _ cont_cons =>               -- Consumer requests
 --             let new_producer : Producer b m r := fun newkreqE newkresp newkm newkpure => ?a
 --             let new_consumer : Consumer b m r := fun newkreq newkrespE newkm newkpure => ?b
---             Proxy.connectProducerConsumer new_producer new_consumer Empty.elim Empty.elim km kp)
---           Empty.elim
+--             Proxy.connectProducerConsumer new_producer new_consumer PEmpty.elim PEmpty.elim km kp)
+--           PEmpty.elim
 --           km                                -- Consumer M
 --           kp)                               -- Consumer Pure
 --       km                                    -- Producer M
@@ -212,7 +212,7 @@ end AlternativeTest
 -- infixl:60 " <-< " => fun consumer producer => Proxy.connectProducerConsumer producer consumer
 
 -- Additional utility functions
-def Proxy.yield : b -> Producer b m Unit := Proxy.respond
+def Proxy.yield : b -> Producer b m PUnit := Proxy.respond
 
 def Proxy.await : Consumer a m a := Proxy.request ()
 
@@ -227,7 +227,7 @@ def Proxy.pipeCompose
   fun ka kb km kp =>
     p1 ka (fun _b k => p2 (fun b' _f => k b') kb km kp) km kp
 
-def Proxy.forM [Monad m] (xs : List a) (f : a → Proxy x' x b' b m Unit) : Proxy x' x b' b m Unit :=
+def Proxy.forM [Monad m] (xs : List a) (f : a → Proxy x' x b' b m PUnit) : Proxy x' x b' b m PUnit :=
   List.foldl (fun acc x kreq kresp km kpure =>
     acc kreq kresp km (fun _ => f x kreq kresp km kpure)) (Proxy.Pure ()) xs
 
@@ -278,26 +278,26 @@ partial def Proxy.filter [Inhabited r] (p : a -> Bool) : Pipe a a m r :=
       else filter p ka kb km kp)
 
 -- Take n elements
-def Proxy.take (n : Nat) : Pipe a a m Unit :=
+def Proxy.take (n : Nat) : Pipe a a m PUnit :=
   fun ka kb km kp =>
     if n = 0 then kp ()
     else ka () (fun a => kb a (fun _ => take (n-1) ka kb km kp))
 
 -- Drop n elements
-def Proxy.drop (n : Nat) : Pipe a a m Unit :=
+def Proxy.drop (n : Nat) : Pipe a a m PUnit :=
   fun ka kb km kp =>
     if n = 0 then cat ka kb km kp
     else ka () (fun _ => drop (n-1) ka kb km kp)
 
 -- Take while predicate holds
-partial def Proxy.takeWhile (p : a -> Bool) : Pipe a a m Unit :=
+partial def Proxy.takeWhile (p : a -> Bool) : Pipe a a m PUnit :=
   fun ka kb km kp =>
     ka () (fun a =>
       if p a then kb a (fun _ => takeWhile p ka kb km kp)
       else kp ())
 
 -- Drop while predicate holds
-partial def Proxy.dropWhile (p : a -> Bool) : Pipe a a m Unit :=
+partial def Proxy.dropWhile (p : a -> Bool) : Pipe a a m PUnit :=
   fun ka kb km kp =>
     ka () (fun a =>
       if p a then dropWhile p ka kb km kp
@@ -316,12 +316,12 @@ partial def Proxy.scan [Inhabited r]
 private partial def Proxy.fold (f : s → a → s) (acc : s) : Consumer a m s := Proxy.Request () fun a => Proxy.fold f (f acc a)
 
 -- Convert list to producer
-def Proxy.fromList : List b → Producer b m Unit
+def Proxy.fromList : List b → Producer b m PUnit
 | []      => Proxy.Pure ()
 | (x::xs) => Proxy.Respond x (fun _ => fromList xs)
 
 -- Convert array to producer
-def Proxy.fromArray : Array b -> Producer b m Unit :=
+def Proxy.fromArray : Array b -> Producer b m PUnit :=
   fromList ∘ Array.toList
 
 -- Collect all values into a list
@@ -397,20 +397,20 @@ partial def Proxy.tee [Inhabited r] : Pipe a (a × a) m r :=
 --     go []
 
 -- Chain multiple pipes together
--- def Proxy.chain (pipes : List (Pipe a a m Unit)) : Pipe a a m Unit :=
+-- def Proxy.chain (pipes : List (Pipe a a m PUnit)) : Pipe a a m PUnit :=
 --   pipes.foldl (fun acc pipe =>
 --     -- Compose pipes: acc >-> pipe
 --     sorry) cat
 
 -- Repeat a producer infinitely
--- partial def Proxy.repeatP [Inhabited r] [Inhabited a] (p : Producer b m Unit) : Producer b m r :=
+-- partial def Proxy.repeatP [Inhabited r] [Inhabited a] (p : Producer b m PUnit) : Producer b m r :=
 --   fun ka kb km kp =>
 --     let rec go :=
 --       p ka kb km (fun _ => go)
 --     go
 
 -- Replicate an element n times
-def Proxy.replicate (n : Nat) (x : b) : Producer b m Unit :=
+def Proxy.replicate (n : Nat) (x : b) : Producer b m PUnit :=
   fromList (List.replicate n x)
 
 -- Cycle through a list infinitely
@@ -427,7 +427,7 @@ def Proxy.cons (x : b) (p : Producer b m r) : Producer b m r :=
     kb x (fun _ => p ka kb km kp)
 
 -- Append an element to a producer
-def Proxy.snoc  (p : Producer b m Unit) (x : b) : Producer b m Unit :=
+def Proxy.snoc  (p : Producer b m PUnit) (x : b) : Producer b m PUnit :=
   fun ka kb km kp =>
     p ka kb km (fun _ => kb x (fun _ => kp ()))
 
@@ -437,16 +437,16 @@ partial def Proxy.mapM [Inhabited r] (f : a -> m b) : Pipe a b m r :=
     ka () (fun a =>
       km b (fun b => kb b (fun _ => Proxy.mapM f ka kb km kp)) (f a))
 
-partial def Proxy.mapM_ [Inhabited a] (f : a -> m Unit) : Consumer a m Unit :=
+partial def Proxy.mapM_ [Inhabited a] (f : a -> m PUnit) : Consumer a m PUnit :=
   fun ka kb km kp =>
     ka () (fun a =>
-      km Unit (fun _ => Proxy.mapM_ f ka kb km kp) (f a))
+      km PUnit (fun _ => Proxy.mapM_ f ka kb km kp) (f a))
 
 -- Print each element (for debugging)
 partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m r :=
   fun ka kb km kp =>
     ka () (fun a =>
-      km Unit (fun _ => kb a (fun _ => print ka kb km kp))
+      km PUnit (fun _ => kb a (fun _ => print ka kb km kp))
              (MonadLift.monadLift (IO.println (toString a))))
 
 -- Composition operations (corresponding to Coq operators)
@@ -906,7 +906,7 @@ end ProxyCategoryLaws
 ----------------- -- Suppose we have some simple Producers (e.g., Source) and Pipes (e.g., Transform)
 -----------------
 -----------------   -- Producer that creates 5 numbers and stops
------------------   def numberProducer : Producer Nat m Unit :=
+-----------------   def numberProducer : Producer Nat m PUnit :=
 -----------------     fun _ka kb _km kp =>
 -----------------       kb 1 (fun _ =>
 -----------------       kb 2 (fun _ =>
@@ -916,32 +916,32 @@ end ProxyCategoryLaws
 -----------------       kp ())))))
 -----------------
 -----------------   -- Alternative using fromList (more idiomatic)
------------------   def numberProducer' : Producer Nat m Unit :=
+-----------------   def numberProducer' : Producer Nat m PUnit :=
 -----------------     Proxy.fromList [1, 2, 3, 4, 5]
 -----------------
 -----------------   -- Pipe that takes Nat, adds 10, converts to String
------------------   partial def addTenToString : Pipe Nat String m Unit :=
+-----------------   partial def addTenToString : Pipe Nat String m PUnit :=
 -----------------     fun ka kb _km kp =>
 -----------------       ka () (fun n =>
 -----------------         kb (toString (n + 10)) (fun _ =>
 -----------------           addTenToString ka kb (fun _ f mt => f mt) kp))
 -----------------
 -----------------   -- Alternative using mapM (if you had it working)
------------------   def addTenToString' : Pipe Nat String Id Unit :=
+-----------------   def addTenToString' : Pipe Nat String Id PUnit :=
 -----------------     Proxy.mapM (fun n => pure (toString (n + 10)))
 -----------------
 -----------------   -- Consumer that concatenates all strings
------------------   partial def concatConsumer : Consumer String (StateM String) Unit :=
+-----------------   partial def concatConsumer : Consumer String (StateM String) PUnit :=
 -----------------     fun ka _kb km kp =>
 -----------------       ka () (fun s =>
------------------         km Unit (fun _ => concatConsumer ka (fun x _ => Empty.elim x) km kp)
+-----------------         km PUnit (fun _ => concatConsumer ka (fun x _ => PEmpty.elim x) km kp)
 -----------------               (modify (fun acc => acc ++ s)))
 -----------------
 -----------------   -- Alternative consumer that returns the final result
 -----------------   partial def concatConsumer' : Consumer String (StateM String) String :=
 -----------------     fun ka _kb km kp =>
 -----------------       ka () (fun s =>
------------------         km Unit (fun _ =>
+-----------------         km PUnit (fun _ =>
 -----------------           km String kp (do
 -----------------             modify (fun acc => acc ++ s)
 -----------------             get))
@@ -952,67 +952,67 @@ end ProxyCategoryLaws
 -----------------     Proxy.fold (fun acc s => s :: acc) []
 -----------------
 -----------------   -- Fixed pipeline using the correct composition operator
------------------   def completePipeline : Effect (StateM String) Unit :=
+-----------------   def completePipeline : Effect (StateM String) PUnit :=
 -----------------     numberProducer //> (addTenToString //> concatConsumer)
 -----------------
 -----------------   -- Alternative syntax using the function composition version
------------------   def completePipeline' : Effect (StateM String) Unit :=
+-----------------   def completePipeline' : Effect (StateM String) PUnit :=
 -----------------     (fun _ => numberProducer) />/ (fun _ => addTenToString //> concatConsumer) $ ()
 -----------------
 -----------------   -- Or using the push composition for a more idiomatic feel
------------------   def completePipeline'' : Effect (StateM String) Unit :=
+-----------------   def completePipeline'' : Effect (StateM String) PUnit :=
 -----------------     numberProducer >>~ (fun _ => addTenToString //> concatConsumer)
 ----------------- end Examples1
 -----------------
 ----------------- namespace Examples
 -----------------
------------------ def numbers : Nat -> Producer Nat m Unit
+----------------- def numbers : Nat -> Producer Nat m PUnit
 -----------------   | 0 => Proxy.Pure ()
 -----------------   | n+1 => Proxy.Respond n (fun () => numbers n)
 -----------------
------------------ partial def consume : Consumer Nat (StateM (List Nat)) Unit :=
+----------------- partial def consume : Consumer Nat (StateM (List Nat)) PUnit :=
 -----------------   Proxy.Request () (fun n =>
 -----------------     Proxy.bind (Proxy.M (modify (fun s => s ++ [n]))) (fun _ =>
 -----------------     consume))
 -----------------
 ----------------- -- Example pipeline
------------------ def examplePipeline : Effect (StateM (List Nat)) Unit := numbers 5 >-> consume
+----------------- def examplePipeline : Effect (StateM (List Nat)) PUnit := numbers 5 >-> consume
 -----------------
 ----------------- def exampleIO : List Nat := ((Proxy.runEffect examplePipeline).run []).run.2
 -----------------
 ----------------- -- #guard exampleIO = [1, 2, 3, 4, 5]
 -----------------
 ----------------- -- Example: sum consumer
------------------ partial def summer : Consumer Nat (StateM Nat) Unit :=
+----------------- partial def summer : Consumer Nat (StateM Nat) PUnit :=
 -----------------   Proxy.Request () (fun n =>
 -----------------     Proxy.bind (Proxy.M (modify (· + n))) (fun _ => summer))
 -----------------
 ----------------- -- Example: pipeline with new functions
------------------ def producer : Producer Nat Id Unit :=
+----------------- def producer : Producer Nat Id PUnit :=
 -----------------   Proxy.fromList [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 -----------------
------------------ def pipeline1 : Pipe Nat Nat Id Unit :=
+----------------- def pipeline1 : Pipe Nat Nat Id PUnit :=
 -----------------   Proxy.filter (· % 2 = 0)  -- Keep even numbers
 -----------------
------------------ def pipeline3 : Pipe Nat Nat Id Unit :=
+----------------- def pipeline3 : Pipe Nat Nat Id PUnit :=
 -----------------   Proxy.take 3              -- Take first 3
 -----------------
------------------ def pipeline4 : Pipe Nat (Nat × Nat) Id Unit :=
+----------------- def pipeline4 : Pipe Nat (Nat × Nat) Id PUnit :=
 -----------------   Proxy.enumerate
 -----------------
 ----------------- -- More examples
------------------ def exampleFromArray : Producer String Id Unit :=
+----------------- def exampleFromArray : Producer String Id PUnit :=
 -----------------   Proxy.fromArray #["hello", "world", "pipes"]
 -----------------
------------------ def exampleScan : Producer Nat Id Unit -> Producer Nat Id Unit :=
+----------------- def exampleScan : Producer Nat Id PUnit -> Producer Nat Id PUnit :=
 -----------------   fun input => sorry -- input //> Proxy.scan (·+·) 0
 -----------------
 ----------------- -- Example using forward composition
 ----------------- def composedPipeline := producer ??? pipeline1 //> pipeline2 //> pipeline3 ?? summer
 -----------------
 ----------------- -- Example using function composition
------------------ def filterEven : Pipe Nat Nat Id Unit := Proxy.filter (· % 2 = 0)
------------------ def takeThree : Pipe Nat Nat Id Unit := Proxy.take 3
+----------------- def filterEven : Pipe Nat Nat Id PUnit := Proxy.filter (· % 2 = 0)
+----------------- def takeThree : Pipe Nat Nat Id PUnit := Proxy.take 3
 -----------------
 ----------------- def composedFunc := filterEven />/ takeThree
 -----------------

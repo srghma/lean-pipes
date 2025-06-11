@@ -4,10 +4,10 @@ import Pipes.Internal
 
 namespace Proxy
 
-@[always_inline, inline] def runEffect [Monad m] (eff : Proxy Empty a b' Empty m r) : m r :=
+@[always_inline, inline] def runEffect [Monad m] (eff : Proxy PEmpty a b' PEmpty m r) : m r :=
   match eff with
-    | .Request x _ => Empty.elim x
-    | .Respond x _ => Empty.elim x
+    | .Request x _ => PEmpty.elim x
+    | .Respond x _ => PEmpty.elim x
     | .M mx k      => mx >>= fun x => runEffect (k x)
     | .Pure xr     => pure xr
   termination_by structural eff
@@ -200,7 +200,7 @@ def reflect (p : Proxy a' a b' b m r) : Proxy b b' a a' m r :=
   | .Pure xr => .Pure xr
 
 -- Type aliases
-abbrev Effect      := Proxy PEmpty PUnit PUnit Empty
+abbrev Effect      := Proxy PEmpty PUnit PUnit PEmpty
 abbrev Producer b  := Proxy PEmpty PUnit PUnit b
 abbrev Pipe a b    := Proxy PUnit a PUnit b -- downstream input -> downstream output
 abbrev Consumer a  := Proxy PUnit a PUnit PEmpty
@@ -208,8 +208,8 @@ abbrev Client a' a := Proxy a' a PUnit PEmpty
 abbrev Server b' b := Proxy PEmpty PUnit b' b
 
 abbrev Effect_        m r := forall {a' a b' b}, Proxy a'   a b'   b m r
-abbrev Producer_ b    m r := forall {a' a},      Proxy a'   a Unit b m r
-abbrev Consumer_ a    m r := forall {b' b},      Proxy Unit a b'   b m r
+abbrev Producer_ b    m r := forall {a' a},      Proxy a'   a PUnit b m r
+abbrev Consumer_ a    m r := forall {b' b},      Proxy PUnit a b'   b m r
 abbrev Server_   b' b m r := forall {a' a},      Proxy a'   a b'   b m r
 abbrev Client_   a' a m r := forall {b' b},      Proxy a'   a b'   b m r
 

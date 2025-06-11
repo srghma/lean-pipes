@@ -223,11 +223,11 @@ namespace Examples
   def getLine (prompt : String) : F ConsoleF String :=
     F.monadLift (ConsoleF.getPutS prompt id)
 
-  def putLine (s : String) : F ConsoleF Unit :=
+  def putLine (s : String) : F ConsoleF PUnit :=
     F.monadLift (ConsoleF.putStrLn s ())
 
   -- Example program
-  def exampleProgram : F ConsoleF Unit := do
+  def exampleProgram : F ConsoleF PUnit := do
     let name ← getLine "What's your name? "
     putLine s!"Hello, {name}!"
 
