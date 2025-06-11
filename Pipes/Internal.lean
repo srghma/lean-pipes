@@ -43,6 +43,38 @@ inductive Proxy.{u} (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : 
 instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
   default := .Pure default
 
+--- instance [BEq a'] [BEq a] [BEq b] [BEq b'] [BEq r] : BEq (Proxy a' a b' b Id r) where
+---   beq
+---     | .Pure r₁, .Pure r₂ => r₁ == r₂
+---     | .Request a₁ _, .Request a₂ _ => a₁ == a₂
+---     | .Respond b₁ _, .Respond b₂ _ => b₁ == b₂
+---     | .M op₁ _, .M op₂ _ => op₁ == op₂
+---     | _, _ => false
+
+-- instance
+--   {a' a b' b r : Type u} {m : Type u → Type u}
+--   [DecidableEq a'] [DecidableEq b] [DecidableEq r] [DecidableEq (m PUnit)] :
+--   DecidableEq (Proxy a' a b' b m r) where
+--   decEq
+--     | .Pure r₁, .Pure r₂ =>
+--         match decEq r₁ r₂ with
+--         | isTrue h => isTrue (by rw [h])
+--         | isFalse h => isFalse (by intro h'; injection h' with h₁; exact h h₁)
+--     | .Request a₁ _, .Request a₂ _ =>
+--         match decEq a₁ a₂ with
+--         | isTrue h => isTrue (by rw [h])
+--         | isFalse h => isFalse (by intro h'; injection h' with h₁ _; exact h h₁)
+--     | .Respond b₁ _, .Respond b₂ _ =>
+--         match decEq b₁ b₂ with
+--         | isTrue h => isTrue (by rw [h])
+--         | isFalse h => isFalse (by intro h'; injection h' with h₁ _; exact h h₁)
+--     | .M op₁ _, .M op₂ _ =>
+--         match decEq op₁ op₂ with
+--         | isTrue h => isTrue (by rw [h])
+--         | isFalse h => isFalse (by intro h'; injection h' with h₁ _; exact h h₁)
+--     | _, _ => isFalse (by intro h; cases h)
+
+
 namespace Proxy
 
 -- Fundamental code to operate with Proxy
