@@ -146,10 +146,10 @@ theorem nested_for_b
 
 -- In coq - just `map`, bad name
 @[inline] def Fueled.mapPipe (d : r) (fuel : Nat) (f : a → b) : Pipe a b m r :=
-  -- forP (Proxy.Fueled.cat d fuel) (fun val => Proxy.respond (f val))
-  match fuel with
-  | 0     => .Pure d
-  | fuel' + 1 => .Request .unit (fun a => .Respond (f a) (fun _ => Fueled.mapPipe d fuel' f))
+  forP (Proxy.Fueled.cat d fuel) (fun val => Proxy.respond (f val))
+  -- match fuel with
+  -- | 0     => .Pure d
+  -- | fuel' + 1 => .Request .unit (fun a => .Respond (f a) (fun _ => Fueled.mapPipe d fuel' f))
 
 @[inline] partial def Unbounded.mapPipe [Inhabited r] (f : a → b) : Pipe a b m r :=
   -- forP (Proxy.Unbounded.cat) (fun val => Proxy.respond (f val))
@@ -662,7 +662,8 @@ partial def Unbounded.buffer [Inhabited r] (n : Nat) : Pipe a (List a) m r :=
     Respond (x::xs) fun _ => Unbounded.drain
 
 -- https://hackage.haskell.org/package/pipes-4.3.16/docs/Pipes-Prelude.html#v:tee
--- def Unbounded.tee : Pipe a (a × a) m r :=
+-- Transform a Consumer to a Pipe that reforwards all values further downstream
+-- def Unbounded.tee : Consumer a m r -> Pipe a a m r :=
 
 -- Infinite cycle through list
 partial def Unbounded.cycle [Inhabited r] [Inhabited a] (xs : List a) : Producer a m r :=
