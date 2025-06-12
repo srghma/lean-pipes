@@ -12,8 +12,8 @@ import Mathlib.CategoryTheory.Functor.Basic
 namespace Proxy
 
 -- implementation is same as `respond`, but cannot use `:= respond`
--- /- @[inline] -/ @[simp] abbrev yield : b -> Producer_ b m PUnit := (Respond · Proxy.Pure)
-/- @[inline] -/ @[simp] abbrev yield : b -> Proxy a' a PUnit b m PUnit := respond
+-- @[inline, simp] abbrev yield : b -> Producer_ b m PUnit := (Respond · Proxy.Pure)
+@[inline, simp] abbrev yield : b -> Proxy a' a PUnit b m PUnit := respond
 
 infixl:70 " ~> " => fun f g => f />/ g
 infixl:70 " <~ " => fun f g => g />/ f
@@ -21,14 +21,14 @@ infixl:70 " <~ " => fun f g => g />/ f
 notation:70 x " >~ " y => (fun (_ : PUnit) => x) >\\ y
 notation:70 x " ~< " y => y >~ x
 
--- /- @[inline] -/ @[simp] abbrev await : Consumer_ a m a := request ()
-/- @[inline] -/ @[simp] abbrev await : Proxy PUnit a b' b m a := request ()
+-- @[inline, simp] abbrev await : Consumer_ a m a := request ()
+@[inline, simp] abbrev await : Proxy PUnit a b' b m a := request ()
 
-/- @[inline] -/ def Fueled.cat (default : r) (fuel : Nat) : Pipe a a m r := Fueled.pull default fuel ()
+@[inline] def Fueled.cat (default : r) (fuel : Nat) : Pipe a a m r := Fueled.pull default fuel ()
 
-/- @[inline] -/ def Unbounded.cat [Inhabited r] : Pipe a a m r := Unbounded.pull ()
+@[inline] def Unbounded.cat [Inhabited r] : Pipe a a m r := Unbounded.pull ()
 
-def connect
+def connect [Inhabited r] -- TODO: prove termination of pullR and pushR
   (p1 : Proxy a' a PUnit b m r)
   (p2 : Proxy PUnit b c' c m r) :
   Proxy a' a c' c m r :=
@@ -63,7 +63,7 @@ infixl:60 " <-< " => fun x y => connect y x
 inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
   | Respond {x : Type u} (downstreamOutput : Option b) (op : m x) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
   | Pure    : r → ProxyNextStep b m r
-/- @[inline] -/ def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
+def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
   match p with
   | Request v _ => PEmpty.elim v
   | Respond b fu => ProxyNextStep.Respond (.some b) (pure ()) (fun _ => Proxy.next (fu ()))
@@ -74,7 +74,7 @@ inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : 
 -- inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
 --   | Respond {x : Type u} (op : m (Option b × x)) (cont : x → ProxyNextStep b m r) : ProxyNextStep b m r
 --   | Pure    : r → ProxyNextStep b m r
--- /- @[inline] -/ def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
+-- def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
 --   match p with
 --   | Request v _ => PEmpty.elim v
 --   | Respond b fu =>
@@ -97,10 +97,10 @@ inductive ProxyNextStep.{u} (b : Type u) (m : Type u → Type u) (r : Type u) : 
 ------- A: no, x doesnt allow
 
 -- each = every, in coq too
-/- @[inline] -/ def each (xs : List b) : Producer b m PUnit :=
+@[inline] def each (xs : List b) : Producer b m PUnit :=
   xs.forM respond
 
-/- @[inline] -/ def every (xs : List b) : Producer b m PUnit :=
+@[inline] def every (xs : List b) : Producer b m PUnit :=
   xs.foldlM (fun _ x => respond x) ()
 
 namespace PipesForLaws
@@ -140,29 +140,29 @@ end PipesForLaws
 -- replicateM :: Monad m => Int -> m a -> Producer' a m ()
 -- replicateM n m = lift m >~ take n
 
-/- @[inline] -/ def Fueled.drain (d : r) (fuel : Nat) : Consumer_ a m r :=
+@[inline] def Fueled.drain (d : r) (fuel : Nat) : Consumer_ a m r :=
   -- forP (Proxy.Fueled.cat d fuel) (fun _ => Proxy.Pure ())
   match fuel with
   | 0     => .Pure d
   | fuel' + 1 => .Request .unit (fun _ => Fueled.drain d fuel')
 
-/- @[inline] -/ partial def Unbounded.drain [Inhabited r] : Consumer_ a m r :=
+@[inline] partial def Unbounded.drain [Inhabited r] : Consumer_ a m r :=
   -- forP (Proxy.Unbounded.cat) (fun _ => Proxy.Pure ())
   .Request .unit (fun _ => drain)
 
 -- In coq - just `map`, bad name
-/- @[inline] -/ def Fueled.mapPipe (d : r) (fuel : Nat) (f : a → b) : Pipe a b m r :=
+@[inline] def Fueled.mapPipe (d : r) (fuel : Nat) (f : a → b) : Pipe a b m r :=
   -- forP (Proxy.Fueled.cat d fuel) (fun val => Proxy.respond (f val))
   match fuel with
   | 0     => .Pure d
   | fuel' + 1 => .Request .unit (fun a => .Respond (f a) (fun _ => Fueled.mapPipe d fuel' f))
 
-/- @[inline] -/ partial def Unbounded.mapPipe [Inhabited r] (f : a → b) : Pipe a b m r :=
+@[inline] partial def Unbounded.mapPipe [Inhabited r] (f : a → b) : Pipe a b m r :=
   forP (Proxy.Unbounded.cat) (fun val => Proxy.respond (f val))
   -- .Request () (fun a => .Respond (f a) (fun _ => mapPipe f))
 
 -- In coq - just `mapM`, bad name
-/- @[inline] -/ def Pipe.Fueled.mapM [Monad m] (f : a → m b) (d : r) (fuel : Nat) : Pipe a b m r :=
+@[inline] def Pipe.Fueled.mapM [Monad m] (f : a → m b) (d : r) (fuel : Nat) : Pipe a b m r :=
   if fuel == 0 then
     .Pure d
   else
@@ -175,33 +175,33 @@ end PipesForLaws
     · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all [beq_iff_eq];)
     · exact Nat.zero_lt_one
 
-/- @[inline] -/ partial def Pipe.Unbounded.mapM [Inhabited r] (f : a -> m b) : Pipe a b m r :=
+@[inline] partial def Pipe.Unbounded.mapM [Inhabited r] (f : a -> m b) : Pipe a b m r :=
   .Request () (fun a => .M (f a) (fun b => .Respond b (fun _ => mapM f)))
 
-/- @[inline] -/ def Fueled.mapM_ [Monad m] (f : a → m PUnit) (d : r) (fuel : Nat) : Consumer a m r :=
+@[inline] def Fueled.mapM_ [Monad m] (f : a → m PUnit) (d : r) (fuel : Nat) : Consumer a m r :=
   forP (Proxy.Fueled.cat d fuel) (fun val => monadLift (f val))
 
-/- @[inline] -/ partial def Unbounded.mapM_ [Inhabited r] (f : a → m PUnit) : Consumer a m r :=
+@[inline] partial def Unbounded.mapM_ [Inhabited r] (f : a → m PUnit) : Consumer a m r :=
   forP Proxy.Unbounded.cat (fun val => monadLift (f val))
   -- .Request ?? (fun a => .M (f a) (fun _ => Unbounded.mapM_ f))
 
-/- @[inline] -/ def Pipe.Fueled.sequence [Monad m] (d : r) (fuel : Nat) : Pipe (m a) a m r :=
+@[inline] def Pipe.Fueled.sequence [Monad m] (d : r) (fuel : Nat) : Pipe (m a) a m r :=
   mapM id d fuel
 
-/- @[inline] -/ partial def Pipe.Unbounded.sequence [Inhabited r] : Pipe (m a) a m r :=
+@[inline] partial def Pipe.Unbounded.sequence [Inhabited r] : Pipe (m a) a m r :=
   mapM id
 
-/- @[inline] -/ def Fueled.mapFoldable (d : r) (fuel : Nat) (f : a → List b) : Pipe a b m r :=
+@[inline] def Fueled.mapFoldable (d : r) (fuel : Nat) (f : a → List b) : Pipe a b m r :=
   forP (Proxy.Fueled.cat d fuel) (fun x => (f x).forM Proxy.respond)
 
-/- @[inline] -/ def whenP (cond : Bool) (action : Pipe a a m PUnit) : Pipe a a m PUnit :=
+@[inline] def whenP (cond : Bool) (action : Pipe a a m PUnit) : Pipe a a m PUnit :=
   if cond then action else Pure ()
 
 -- NOTE: coq uses `forP` version
-/- @[inline] -/ def Fueled.ForPVersion.filter (d : r) (fuel : Nat) (p : a → Bool) : Pipe a a m r :=
+@[inline] def Fueled.ForPVersion.filter (d : r) (fuel : Nat) (p : a → Bool) : Pipe a a m r :=
   forP (Proxy.Fueled.cat d fuel) (fun x => whenP (p x) (Proxy.yield x))
 
-/- @[inline] -/ def Fueled.filter
+@[inline] def Fueled.filter
   (d : r)
   (p : a → Bool)
   (fuel : Nat)
@@ -217,14 +217,14 @@ end PipesForLaws
     · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all only [beq_iff_eq]; contradiction)
     · exact Nat.zero_lt_one
 
-/- @[inline] -/ partial def Unbounded.filter
+@[inline] partial def Unbounded.filter
   [Inhabited r]
   (p : a → Bool) : Pipe a a m r :=
     Request PUnit.unit fun a =>
       if p a then Respond a fun _ => filter p
       else filter p
 
-/- @[inline] -/ def Fueled.filterM
+@[inline] def Fueled.filterM
   [Monad m]
   (d : r)
   (p : a → m Bool)
@@ -238,7 +238,7 @@ end PipesForLaws
         else
           filterM d p fuel
 
-/- @[inline] -/ partial def Unbounded.filterM
+@[inline] partial def Unbounded.filterM
   [Inhabited r]
   (p : a → m Bool) : Pipe a a m r :=
     Request PUnit.unit fun a => do
@@ -248,42 +248,38 @@ end PipesForLaws
       else
         filterM p
 
-/- @[inline] -/ def take : Nat -> Pipe a a m PUnit
+@[inline] def take : Nat -> Pipe a a m PUnit
   | 0 => .Pure ()
   | n+1 => .Request () (fun a => .Respond a (fun _ => take n))
 
--- /- @[inline] -/ def take : Nat → Pipe a a m PUnit
---   | 0    => .Pure ()
---   | n+1  => Proxy.await >>= fun a => do Proxy.yield a; (take n)
-
-/- @[inline] -/ def Fueled.takeWhile (p : a → Bool) (d : r) (fuel : Nat) : Pipe a a m PUnit :=
+@[inline] def Fueled.takeWhile (p : a → Bool) (d : r) (fuel : Nat) : Pipe a a m PUnit :=
   match fuel with
   | 0 => Pure ()
   | Nat.succ fuel' =>
     request () >>= fun a_val => if p a_val then respond a_val >>= fun _ => takeWhile p d fuel' else Pure ()
 
-/- @[inline] -/ partial def Unbounded.takeWhile (p : a → Bool) : Pipe a a m PUnit :=
+@[inline] partial def Unbounded.takeWhile (p : a → Bool) : Pipe a a m PUnit :=
   request () >>= fun a_val => if p a_val then respond a_val >>= fun _ => takeWhile p else Pure ()
 
-/- @[inline] -/ def replicateP_ (n : Nat) (act : Pipe a a m PUnit) : Pipe a a m PUnit :=
+@[inline] def replicateP_ (n : Nat) (act : Pipe a a m PUnit) : Pipe a a m PUnit :=
   match n with
   | 0 => Pure ()
   | n'+1 => act >>= fun _ => replicateP_ n' act
 
-/- @[inline] -/ def Fueled.drop (fuel_for_cat : Nat) (d : r) : Nat -> Pipe a a m r
+@[inline] def Fueled.drop (fuel_for_cat : Nat) (d : r) : Nat -> Pipe a a m r
   | 0 => Fueled.cat d fuel_for_cat
   | n_to_drop+1 => .Request () (fun _ => Fueled.drop fuel_for_cat d n_to_drop)
 
-/- @[inline] -/ def Unbounded.drop : Nat -> Pipe a a m PUnit
+@[inline] def Unbounded.drop : Nat -> Pipe a a m PUnit
   | 0 => Unbounded.cat
   | n+1 => .Request () (fun _ => Unbounded.drop n)
 
 -- partial def Proxy.dropWhile (p : a -> Bool) : Pipe a a m PUnit :=
 
-/- @[inline] -/ def Fueled.concat (d : r) (fuel : Nat) : Pipe (List a) a m r :=
+@[inline] def Fueled.concat (d : r) (fuel : Nat) : Pipe (List a) a m r :=
   forP (Proxy.Fueled.cat d fuel) (·.forM Proxy.respond)
 
-/- @[inline] -/ private def Fueled.findIndices.go
+@[inline] private def Fueled.findIndices.go
   {a r : Type 0}
   (p : a → Bool) (d : r) (fuel i : Nat) : Pipe a Nat m r :=
   if fuel == 0 then
@@ -300,9 +296,9 @@ end PipesForLaws
     · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all [beq_iff_eq];)
     · exact Nat.zero_lt_one
 
-/- @[inline] -/ def Fueled.findIndices (p : a → Bool) (d : r) (fuel : Nat) : Pipe a Nat m r := Proxy.Fueled.findIndices.go p d fuel 0
+@[inline] def Fueled.findIndices (p : a → Bool) (d : r) (fuel : Nat) : Pipe a Nat m r := Proxy.Fueled.findIndices.go p d fuel 0
 
-/- @[inline] -/ private partial def Unbounded.findIndices.go
+@[inline] private partial def Unbounded.findIndices.go
   {a : Type 0} [Inhabited r]
   (p : a → Bool) : Nat → Pipe a Nat m r
   | i =>
@@ -312,12 +308,12 @@ end PipesForLaws
         else
           go p (i + 1)
 
-/- @[inline] -/ def Unbounded.findIndices [Inhabited r] (p : a → Bool) : Pipe a Nat m r := Proxy.Unbounded.findIndices.go p 0
+@[inline] def Unbounded.findIndices [Inhabited r] (p : a → Bool) : Pipe a Nat m r := Proxy.Unbounded.findIndices.go p 0
 
-/- @[inline] -/ def Fueled.elemIndices [BEq a] (x_val : a) (d : r) (fuel : Nat) : Pipe a Nat m r := Proxy.Fueled.findIndices (· == x_val) d fuel
-/- @[inline] -/ def Unbounded.elemIndices [Inhabited r] [BEq a] (x_val : a) : Pipe a Nat m r := Proxy.Unbounded.findIndices (· == x_val)
+@[inline] def Fueled.elemIndices [BEq a] (x_val : a) (d : r) (fuel : Nat) : Pipe a Nat m r := Proxy.Fueled.findIndices (· == x_val) d fuel
+@[inline] def Unbounded.elemIndices [Inhabited r] [BEq a] (x_val : a) : Pipe a Nat m r := Proxy.Unbounded.findIndices (· == x_val)
 
-/- @[inline] -/ def Fueled.scan
+@[inline] def Fueled.scan
   (step : s → a → s)
   (done : s → b)
   (d : r)
@@ -336,12 +332,12 @@ end PipesForLaws
     · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all only [beq_iff_eq]; contradiction)
     · exact Nat.zero_lt_one
 
-/- @[inline] -/ partial def Unbounded.scan [Inhabited r] (step : s → a → s) (done : s → b) (acc : s) : Pipe a b m r :=
+@[inline] partial def Unbounded.scan [Inhabited r] (step : s → a → s) (done : s → b) (acc : s) : Pipe a b m r :=
   .Request () fun a =>
     let acc' := step acc a
     .Respond (done acc') fun _ => Unbounded.scan step done acc'
 
-/- @[inline] -/ def Fueled.scanM
+@[inline] def Fueled.scanM
   [Monad m]
   (step : s → a → m s)
   (done : s → m b)
@@ -362,13 +358,13 @@ end PipesForLaws
     · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all only [beq_iff_eq]; contradiction)
     · exact Nat.zero_lt_one
 
-/- @[inline] -/ partial def Unbounded.scanM [Inhabited r] [Monad m] (step : s → a → m s) (done : s → m b) (acc : s) : Pipe a b m r :=
+@[inline] partial def Unbounded.scanM [Inhabited r] [Monad m] (step : s → a → m s) (done : s → m b) (acc : s) : Pipe a b m r :=
   Proxy.Request PUnit.unit fun a =>
     Proxy.M (step acc a) fun acc' =>
       Proxy.M (done acc') fun b =>
         Proxy.Respond b fun _ => Unbounded.scanM step done acc'
 
-/- @[inline] -/ def Fueled.chain
+@[inline] def Fueled.chain
   [Monad m]
   (f : a → m PUnit) (fuel : Nat) (d : r) : Pipe a a m r :=
   if fuel == 0 then
@@ -383,7 +379,7 @@ end PipesForLaws
     · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all only [beq_iff_eq]; contradiction)
     · exact Nat.zero_lt_one
 
-/- @[inline] -/ partial def Unbounded.chain
+@[inline] partial def Unbounded.chain
   [Inhabited r] [Monad m]
   (f : a → m PUnit) : Pipe a a m r :=
   Proxy.Request PUnit.unit fun a =>
@@ -391,7 +387,7 @@ end PipesForLaws
       Proxy.Respond a fun _ =>
         Proxy.Unbounded.chain f
 
-/- @[inline] -/ def fold
+@[inline] def fold
   {b acc result : Type u}
   [Monad m]
   (step : acc → b → acc)
@@ -406,7 +402,7 @@ end PipesForLaws
       let acc' := step begin_val a
       fold step done acc' (fu .unit)
 
-/- @[inline] -/ def fold'
+@[inline] def fold'
   {b acc result : Type u}
   [Monad m]
   (step : acc → b → acc)
@@ -420,7 +416,7 @@ end PipesForLaws
       let acc' := step begin_val a
       fold' step done acc' (fu .unit)
 
-/- @[inline] -/ def foldM
+@[inline] def foldM
   {b acc res : Type u}
   {m : Type u → Type u}
   [Monad m]
@@ -436,7 +432,7 @@ end PipesForLaws
     | Respond a fu => do go (fu .unit) (step (← mx) a)
   go p0 begin_m_x
 
-/- @[inline] -/ def foldM'
+@[inline] def foldM'
   {b acc res r : Type u}
   {m : Type u → Type u}
   [Monad m]
@@ -452,7 +448,7 @@ end PipesForLaws
     | Respond a fu => do go (fu .unit) (step (← mx) a)
   go p0 begin_m_x
 
-/- @[inline] -/ def null
+@[inline] def null
   {b : Type 0} -- BC of Bool
   [Monad m]
   (p : Producer b m PUnit) : m Bool :=
@@ -462,7 +458,7 @@ end PipesForLaws
   | M act cont => do null (cont (← act))
   | Respond _ _ => pure false
 
-/- @[inline] -/ def all
+@[inline] def all
   {b : Type 0}
   [Monad m]
   (p : b → Bool) (p0 : Producer b m PUnit) : m Bool :=
@@ -474,7 +470,7 @@ end PipesForLaws
       if p x then all p (fu .unit)
       else pure false
 
-/- @[inline] -/ def any
+@[inline] def any
   {b : Type 0}
   [Monad m]
   (p : b → Bool) (p0 : Producer b m PUnit) : m Bool :=
@@ -486,12 +482,12 @@ end PipesForLaws
       if p x then pure true
       else any p (fu .unit)
 
-/- @[inline] -/ def and [Monad m] : Producer Bool m PUnit -> m Bool := all id
-/- @[inline] -/ def or [Monad m] : Producer Bool m PUnit -> m Bool := any id
-/- @[inline] -/ def elem [Monad m] [BEq b] (b_val : b) : Producer b m PUnit -> m Bool := any (· == b_val)
-/- @[inline] -/ def notElem [Monad m] [BEq b] (b_val : b) : Producer b m PUnit -> m Bool := any (Bool.not ∘ (· == b_val))
+@[inline] def and [Monad m] : Producer Bool m PUnit -> m Bool := all id
+@[inline] def or [Monad m] : Producer Bool m PUnit -> m Bool := any id
+@[inline] def elem [Monad m] [BEq b] (b_val : b) : Producer b m PUnit -> m Bool := any (· == b_val)
+@[inline] def notElem [Monad m] [BEq b] (b_val : b) : Producer b m PUnit -> m Bool := any (Bool.not ∘ (· == b_val))
 
-/- @[inline] -/ def head
+@[inline] def head
   {b : Type u}
   {m : Type u → Type u}
   [Monad m]
@@ -502,80 +498,80 @@ match p with
 | M mx k => do head (k (← mx))
 | Respond a _fu => pure (some a)
 
-/- @[inline] -/ def Fueled.find
+@[inline] def Fueled.find
   {a : Type u} {m : Type u → Type u}
   [Monad m]
   (p : a → Bool) (fuel : Nat) (prod : Producer a m PUnit) : m (Option a) :=
   Proxy.head (prod >-> Proxy.Fueled.filter PUnit.unit p fuel)
 
-/- @[inline] -/ def Unbounded.find
+@[inline] def Unbounded.find
   {a : Type u} {m : Type u → Type u}
   [Monad m] [Inhabited r]
   (p : a → Bool) (prod : Producer a m PUnit) : m (Option a) :=
   Proxy.head (prod >-> Proxy.Unbounded.filter p)
 
-/- @[inline] -/ def Fueled.findIndex
+@[inline] def Fueled.findIndex
   {a : Type 0}
   [Monad m]
   (p : a → Bool) (fuel : Nat) (prod : Producer a m PUnit) : m (Option Nat) :=
   Proxy.head (prod >-> Proxy.Fueled.findIndices p .unit fuel)
 
-/- @[inline] -/ def Unbounded.findIndex
+@[inline] def Unbounded.findIndex
   {a : Type 0}
   [Monad m] [Inhabited r]
   (p : a → Bool) (prod : Producer a m PUnit) : m (Option Nat) :=
   Proxy.head (prod >-> Proxy.Unbounded.findIndices p)
 
-/- @[inline] -/ def Fueled.index
+@[inline] def Fueled.index
   {a : Type 0}
   [Monad m]
   (n : Nat) (fuel : Nat) (prod : Producer a m PUnit) : m (Option a) :=
   Proxy.head (prod >-> Proxy.Fueled.drop fuel PUnit.unit n)
 
-/- @[inline] -/ def Unbounded.index
+@[inline] def Unbounded.index
   {a : Type 0}
   [Monad m]
   (n : Nat) (prod : Producer a m PUnit) : m (Option a) :=
   Proxy.head (prod >-> Proxy.Unbounded.drop n)
 
-/- @[inline] -/ private def last.go [Monad m] (d : b) : Producer b m PUnit -> m b
+@[inline] private def last.go [Monad m] (d : b) : Producer b m PUnit -> m b
   | .Request v _ => PEmpty.elim v
   | .Respond b cont => go b (cont ())
   | .M op cont => do go d (cont (← op))
   | .Pure _ => pure d
 
-/- @[inline] -/ def last [Monad m] : Producer b m PUnit -> m (Option b)
+@[inline] def last [Monad m] : Producer b m PUnit -> m (Option b)
   | .Request v _ => PEmpty.elim v
   | .Respond b cont => do return .some (<- last.go b (cont ()))
   | .M op cont => do last (cont (← op))
   | .Pure _ => pure none
 
-/- @[inline] -/ def length [Monad m] : Producer b m PUnit -> m Nat := fold (fun (n_val : Nat) (_ : b) => n_val + 1) id 0
+@[inline] def length [Monad m] : Producer b m PUnit -> m Nat := fold (fun (n_val : Nat) (_ : b) => n_val + 1) id 0
 
-/- @[inline] -/ def maximum [Monad m] : Producer Nat m PUnit -> m (Option Nat) :=
+@[inline] def maximum [Monad m] : Producer Nat m PUnit -> m (Option Nat) :=
   let step (x_opt : Option Nat) (z : Nat) :=
     match x_opt with
     | .none => .some z
     | .some a' => .some (max a' z)
   fold step id .none
 
-/- @[inline] -/ def minimum [Monad m] : Producer Nat m PUnit -> m (Option Nat) :=
+@[inline] def minimum [Monad m] : Producer Nat m PUnit -> m (Option Nat) :=
   let step (x_opt : Option Nat) (z : Nat) :=
     match x_opt with
     | .none => .some z
     | .some a' => .some (min a' z)
   fold step id .none
 
-/- @[inline] -/ def sum [Monad m] : Producer Nat m PUnit -> m Nat := fold Nat.add id 0
-/- @[inline] -/ def product [Monad m] : Producer Nat m PUnit -> m Nat := fold Nat.mul id 1
+@[inline] def sum [Monad m] : Producer Nat m PUnit -> m Nat := fold Nat.add id 0
+@[inline] def product [Monad m] : Producer Nat m PUnit -> m Nat := fold Nat.mul id 1
 
-/- @[inline] -/ def toList : Producer b Id PUnit -> List b
+@[inline] def toList : Proxy PEmpty PUnit PUnit b Id PUnit -> List b
   | Request v _ => PEmpty.elim v
   | Pure _ => []
   | Respond a_val fu => a_val :: toList (fu .unit)
   | M mx k => toList (k (Id.run mx))
 
-/- @[inline] -/ def toListM [Monad m] : Producer b m PUnit → m (List b)
+@[inline] def toListM [Monad m] : Producer b m PUnit → m (List b)
   | .Pure _ => pure []
   | .Request v _ => PEmpty.elim v
   | .Respond a_val fu => do
@@ -587,7 +583,7 @@ match p with
 
 -------------------- MY maps
 
-/- @[inline] -/ def mapUpstreamInput
+@[inline] def mapUpstreamInput
   (f : a' → A') : Proxy a' a b' b m r → Proxy A' a b' b m r
   | Request a' cont => Request (f a') (fun x => mapUpstreamInput f (cont x))
   | Respond b  cont => Respond b (fun x => mapUpstreamInput f (cont x))
@@ -595,7 +591,7 @@ match p with
   | Pure r          => Pure r
   termination_by structural p => p
 
-/- @[inline] -/ def mapDownstreamInput
+@[inline] def mapDownstreamInput
   (f : A → a) : Proxy a' a b' b m r → Proxy a' A b' b m r
   | Request a' cont => Request a' (fun x => mapDownstreamInput f (cont (f x)))
   | Respond b  cont => Respond b (fun x => mapDownstreamInput f (cont x))
@@ -603,7 +599,7 @@ match p with
   | Pure r          => Pure r
   termination_by structural p => p
 
-/- @[inline] -/ def mapUpstreamOutput
+@[inline] def mapUpstreamOutput
   (f : B' → b') : Proxy a' a b' b m r → Proxy a' a B' b m r
   | Request a' cont => Request a' (fun x => mapUpstreamOutput f (cont x))
   | Respond b cont  => Respond b (fun b' => mapUpstreamOutput f (cont (f b')))
@@ -611,7 +607,7 @@ match p with
   | Pure r          => Pure r
   termination_by structural p => p
 
-/- @[inline] -/ def mapDownstreamOutput
+@[inline] def mapDownstreamOutput
   (f : b → B) : Proxy a' a b' b m r → Proxy a' a b' B m r
   | Request a' cont => Request a' (fun x => mapDownstreamOutput f (cont x))
   | Respond b cont  => Respond (f b) (fun x => mapDownstreamOutput f (cont x))
@@ -621,7 +617,7 @@ match p with
 
 --------------------
 
-/- @[inline] -/ private def mapUpstreamInputWithIndex.go
+private def mapUpstreamInputWithIndex.go
   (f : Nat → a' → A') (p : Proxy a' a b' b m r) (acc : Nat) : Proxy A' a b' b m r :=
   match p with
   | Request a' cont => Request (f acc a') (fun x => go f (cont x) (acc + 1))
@@ -630,37 +626,80 @@ match p with
   | Pure r => Pure r
   termination_by structural p
 
-/- @[inline] -/ def mapUpstreamInputWithIndex (f : Nat → a' → A') (p : Proxy a' a b' b m r) : Proxy A' a b' b m r := mapUpstreamInputWithIndex.go f p 0
+@[inline] def mapUpstreamInputWithIndex (f : Nat → a' → A') (p : Proxy a' a b' b m r) : Proxy A' a b' b m r := mapUpstreamInputWithIndex.go f p 0
 
-/- @[inline] -/ def enumerateUpstreamInput [Inhabited r] : Proxy a' a b' b m r -> Proxy (Nat × a') a b' b m r := mapUpstreamInputWithIndex (fun i a' => (i, a'))
+@[inline] def enumerateUpstreamInput : Proxy a' a b' b m r -> Proxy (Nat × a') a b' b m r := mapUpstreamInputWithIndex (fun i a' => (i, a'))
+
+---------
+private def mapDownstreamInputWithIndex.go
+  (f : Nat → A → a) (p : Proxy a' a b' b m r) (acc : Nat) : Proxy a' A b' b m r :=
+  match p with
+  | Request a' cont => Request a' (fun x => go f (cont (f acc x)) (acc + 1))
+  | Respond b cont  => Respond b (fun x => go f (cont x) acc)
+  | M op cont       => M op (fun x => go f (cont x) acc)
+  | Pure r          => Pure r
+  termination_by structural p
+
+@[inline] def mapDownstreamInputWithIndex (f : Nat → A → a) (p : Proxy a' a b' b m r) : Proxy a' A b' b m r :=
+  mapDownstreamInputWithIndex.go f p 0
+
+---------
+
+@[inline] private def mapUpstreamOutputWithIndex.go
+  (f : Nat → B' → b') (p : Proxy a' a b' b m r) (acc : Nat) : Proxy a' a B' b m r :=
+  match p with
+  | Request a' cont => Request a' (fun x => go f (cont x) acc)
+  | Respond b cont  => Respond b (fun b' => go f (cont (f acc b')) (acc + 1))
+  | M op cont       => M op (fun x => go f (cont x) acc)
+  | Pure r          => Pure r
+  termination_by structural p
+
+@[inline] def mapUpstreamOutputWithIndex (f : Nat → B' → b') (p : Proxy a' a b' b m r) : Proxy a' a B' b m r :=
+  mapUpstreamOutputWithIndex.go f p 0
+---------
+
+private def mapDownstreamOutputWithIndex.go
+  (f : Nat → b → B) (p : Proxy a' a b' b m r) (acc : Nat) : Proxy a' a b' B m r :=
+  match p with
+  | Request a' cont => Request a' (fun x => go f (cont x) acc)
+  | Respond b cont  => Respond (f acc b) (fun x => go f (cont x) (acc + 1))
+  | M op cont       => M op (fun x => go f (cont x) acc)
+  | Pure r          => Pure r
+  termination_by structural p
+
+@[inline] def mapDownstreamOutputWithIndex (f : Nat → b → B) (p : Proxy a' a b' b m r) : Proxy a' a b' B m r :=
+  mapDownstreamOutputWithIndex.go f p 0
+
+@[inline] def enumerateDownstreamOutput : Proxy a' a b' b m r → Proxy a' a b' (Nat × b) m r :=
+  mapDownstreamOutputWithIndex (fun i b => (i, b))
 
 -------------------- MY PRELUDE
 
-/- @[inline] -/ def fromList : List b → Producer b m PUnit
+@[inline] def fromList : List b → Producer b m PUnit
 | []      => .Pure ()
 | (x::xs) => .Respond x (fun _ => fromList xs)
 
-/- @[inline] -/ def fromArray : Array b -> Producer b m PUnit :=
+@[inline] def fromArray : Array b -> Producer b m PUnit :=
   fromList ∘ Array.toList
 
 -- Replicate an element n times
-/- @[inline] -/ def replicate (n : Nat) (x : b) : Producer b m PUnit := fromList (List.replicate n x)
+@[inline] def replicate (n : Nat) (x : b) : Producer b m PUnit := fromList (List.replicate n x)
 
-/- @[inline] -/ partial def enumerate.go [Inhabited r] (i : Nat) : Pipe a (Nat × a) m r :=
+@[inline] private partial def Unbounded.enumerate.go [Inhabited r] (i : Nat) : Proxy PUnit a b' (Nat × a) m r :=
   .Request () (fun a => .Respond (i, a) (fun _ => go (i + 1)))
 
-/- @[inline] -/ def enumerate [Inhabited r] : Pipe a (Nat × a) m r := Proxy.enumerate.go 0
+@[inline] def Unbounded.enumerate [Inhabited r] : Proxy PUnit a b' (Nat × a) m r /- Pipe a (Nat × a) m r -/ := enumerate.go 0
 
-/- @[inline] -/ partial def Unbounded.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m r :=
+@[inline] partial def Unbounded.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m r :=
   .Request () (fun a =>
     .M (MonadLift.monadLift (IO.println (toString a))) (fun _ =>
       .Respond a (fun _ => print)))
 
 -- Prepend an element to a producer
-/- @[inline] -/ def cons (x : b) (p : Producer b m r) : Producer b m r := Respond x (fun _ => p)
+@[inline] def cons (x : b) (p : Producer b m r) : Producer b m r := Respond x (fun _ => p)
 
 -- Append an element to a producer
-/- @[inline] -/ def snoc (x : b) (p : Producer b m r) : Producer b m r := p.bind fun r => Respond x (fun _ => Pure r)
+@[inline] def snoc (x : b) (p : Producer b m r) : Producer b m r := p.bind fun r => Respond x (fun _ => Pure r)
 
 -- Buffer n elements: collect list of next n inputs, emit when full
 partial def Unbounded.buffer [Inhabited r] (n : Nat) : Pipe a (List a) m r :=
@@ -711,7 +750,7 @@ partial def Unbounded.repeatP
     p *> go
   go
 
-/- @[inline] -/ def failure [Alternative m] : Proxy a' a b' b m r := Proxy.monadLift Alternative.failure
+@[inline] def failure [Alternative m] : Proxy a' a b' b m r := Proxy.monadLift Alternative.failure
 
 -- https://github.com/Gabriella439/pipes/commit/08e7302f43dbf2a40bd367c5ee73ee3367e17768
 -- private def orElse.convertToM [Monad m] : Proxy PEmpty a b' PEmpty m r → m r
@@ -726,7 +765,7 @@ partial def Unbounded.repeatP
 --     | .Respond v k => PEmpty.elim v -- .Respond xb (fun b' => orElse (k b') y)
 --     | .M mx k => .M (Alternative.orElse mx (fun _ => orElse.convertToM (y PUnit.unit))) (fun x => orElse (k x) y)
 --     | .Pure xr => .Pure xr
--- /- @[inline] -/ instance [Monad m] [Alternative m] : Alternative (Proxy a' a b' b m) := ⟨failure, Proxy.orElse⟩
+-- @[inline] instance [Monad m] [Alternative m] : Alternative (Proxy a' a b' b m) := ⟨failure, Proxy.orElse⟩
 -- instance [Monad m] [Alternative m] [LawfulAlternative m] : LawfulAlternative (Proxy a' a b' b m) where
 --   map_failure g := by sorry
 --   failure_seq x := by sorry
@@ -774,7 +813,7 @@ theorem map_id {a : Type} (d : r) (fuel : Nat) :
   -- apply for_yield_general
   sorry
 
-theorem map_compose
+theorem map_compose [Inhabited r] -- TODO: prove termination of pullR and pushR
   {m : Type → Type} (d : r) (fuel : Nat)
   (f : a → b) (g : b → c) :
   Fueled.mapPipe d fuel (g ∘ f)
