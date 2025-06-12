@@ -28,17 +28,17 @@ structure F (f : Type u → Type u) (α : Type u) : Type (u+1) where
 -- @[always_inline, inline] def F.runF (x : F f α) (kp : α → r) (kf : f r → r) : r := x kp kf
 
 -- Functor map
-@[inline, simp] def F.map [Functor f] (g : α → β) (m : F f α) : F f β := ⟨fun kp kf => m.runF (kp ∘ g) kf⟩
-@[inline, simp] def F.pure (a : α) : F f α := ⟨fun kp _kf => kp a⟩
-@[inline, simp] def F.bind (m : F f α) (f' : α → F f β) : F f β := ⟨fun kp kf => m.runF (fun a => (f' a).runF kp kf) kf⟩
-@[inline, simp] def F.monadLift [Functor f] (fa : f α) : F f α := ⟨fun kp kf => kf (kp <$> fa)⟩
-@[inline, simp] def F.foldF (pureF : α → r) (impureF : f r → r) (fa : F f α) : r := fa.runF pureF impureF
+/- @[inline] -/ @[simp] def F.map [Functor f] (g : α → β) (m : F f α) : F f β := ⟨fun kp kf => m.runF (kp ∘ g) kf⟩
+/- @[inline] -/ @[simp] def F.pure (a : α) : F f α := ⟨fun kp _kf => kp a⟩
+/- @[inline] -/ @[simp] def F.bind (m : F f α) (f' : α → F f β) : F f β := ⟨fun kp kf => m.runF (fun a => (f' a).runF kp kf) kf⟩
+/- @[inline] -/ @[simp] def F.monadLift [Functor f] (fa : f α) : F f α := ⟨fun kp kf => kf (kp <$> fa)⟩
+/- @[inline] -/ @[simp] def F.foldF (pureF : α → r) (impureF : f r → r) (fa : F f α) : r := fa.runF pureF impureF
 
-@[inline] instance [Functor f] : Functor (F f) := { map := F.map }
-@[inline] instance : Pure (F f) := ⟨F.pure⟩
-@[inline] instance : Bind (F f) := ⟨F.bind⟩
-@[inline] instance : Monad (F f) := {}
-@[inline] instance [Functor m] : MonadLift m (F m) := ⟨F.monadLift⟩
+/- @[inline] -/ instance [Functor f] : Functor (F f) := { map := F.map }
+/- @[inline] -/ instance : Pure (F f) := ⟨F.pure⟩
+/- @[inline] -/ instance : Bind (F f) := ⟨F.bind⟩
+/- @[inline] -/ instance : Monad (F f) := {}
+/- @[inline] -/ instance [Functor m] : MonadLift m (F m) := ⟨F.monadLift⟩
 
 -- Retract for monadic computations
 -- |
@@ -52,11 +52,11 @@ structure F (f : Type u → Type u) (α : Type u) : Type (u+1) where
 -- From https://github.com/leanprover-community/mathlib4/blob/730e4db21155a3faee9cadd55d244dbf72f06391/Mathlib/Control/Combinators.lean#L14-L17
 @[always_inline, inline, simp] def Monad.joinM {m : Type u → Type u} [Monad m] {α : Type u} (a : m (m α)) : m α := bind a id
 
-@[inline, simp] def F.retract [Monad m] : F m α → m α := fun m => m.runF Pure.pure Monad.joinM
+/- @[inline] -/ @[simp] def F.retract [Monad m] : F m α → m α := fun m => m.runF Pure.pure Monad.joinM
 -- Natural transformation lifting
-@[inline, simp] def F.hoistF (nt : {α : Type u} → f α → g α) : F f α → F g α := fun m => ⟨fun kp kf => m.runF kp (kf ∘ nt)⟩
+/- @[inline] -/ @[simp] def F.hoistF (nt : {α : Type u} → f α → g α) : F f α → F g α := fun m => ⟨fun kp kf => m.runF kp (kf ∘ nt)⟩
 -- Monadic iteration
-@[inline, simp] def F.iterM [Pure m] (phi : f (m α) → m α) : F f α → m α := fun xs => xs.runF Pure.pure phi
+/- @[inline] -/ @[simp] def F.iterM [Pure m] (phi : f (m α) → m α) : F f α → m α := fun xs => xs.runF Pure.pure phi
 
 @[inline, simp]
 def F.failure [Alternative f] : F f α := ⟨fun _kp kf => kf Alternative.failure⟩
@@ -70,11 +70,11 @@ def F.orElse [Monad f] [Alternative f] (x : F f α) (y : (Unit -> F f α)) : F f
   ⟩
 
 -- TODO: use def like ReaderT, but <|> fails even with OrElse
--- @[inline] instance [Monad f] [Alternative f] : OrElse (F f a) := ⟨F.orElse⟩
--- @[inline] instance [Monad f] [Alternative f] : HOrElse (F f a) (F f a) (F f a) := ⟨F.orElse⟩
+-- /- @[inline] -/ instance [Monad f] [Alternative f] : OrElse (F f a) := ⟨F.orElse⟩
+-- /- @[inline] -/ instance [Monad f] [Alternative f] : HOrElse (F f a) (F f a) (F f a) := ⟨F.orElse⟩
 
-@[inline] instance [Monad f] [Alternative f] : Alternative (F f) := ⟨F.failure, F.orElse⟩
-@[inline] instance [Monad f] [Alternative f] : AlternativeMonad (F f) where
+/- @[inline] -/ instance [Monad f] [Alternative f] : Alternative (F f) := ⟨F.failure, F.orElse⟩
+/- @[inline] -/ instance [Monad f] [Alternative f] : AlternativeMonad (F f) where
 
 namespace AlternativeTests
 
@@ -118,17 +118,17 @@ namespace AlternativeTests
 end AlternativeTests
 
 -- MonadState instance
-@[inline] instance [Functor m] [MonadState σ m] : MonadState σ (F m) where
+/- @[inline] -/ instance [Functor m] [MonadState σ m] : MonadState σ (F m) where
   get := F.monadLift MonadState.get
   set s := F.monadLift (MonadState.set s)
   modifyGet f := F.monadLift (MonadState.modifyGet f)
 
 -- MonadReader instance
-@[inline] instance [Functor m] [MonadReader ρ m] : MonadReader ρ (F m) where
+/- @[inline] -/ instance [Functor m] [MonadReader ρ m] : MonadReader ρ (F m) where
   read := F.monadLift MonadReader.read
 
 -- MonadExcept instance
-@[inline] instance [Functor m] [Monad m] [MonadExcept ε m] : MonadExcept ε (F m) where
+/- @[inline] -/ instance [Functor m] [Monad m] [MonadExcept ε m] : MonadExcept ε (F m) where
   throw e := F.monadLift (MonadExcept.throw e)
   tryCatch m h := F.monadLift (tryCatch (F.retract m) (F.retract ∘ h))
 

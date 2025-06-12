@@ -77,7 +77,7 @@ instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
 namespace Proxy
 
 -- Fundamental code to operate with Proxy
-@[inline] def foldProxy
+/- @[inline] -/ def foldProxy
   {s : Type v}
   (ka : a' → (a → s) → s)
   (kb : b → (b' → s) → s)
@@ -94,7 +94,7 @@ namespace Proxy
 -- This is equivalent to [foldProxy Request Respond (fun _ => M)], but using
 -- that definition makes some proofs harder.
 -- NOTE: in coq diff order of args
-@[inline, simp] def bind
+/- @[inline] -/ @[simp] def bind
   (p0 : Proxy a' a b' b m c)
   (f : c → Proxy a' a b' b m d) :
   Proxy a' a b' b m d :=
@@ -104,29 +104,29 @@ namespace Proxy
   | .M mx k => .M mx (fun x => (k x).bind f)
   | .Pure xc => f xc
 
-@[inline, simp] private abbrev map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+/- @[inline] -/ @[simp] private abbrev map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
   Proxy.bind p (fun val => Proxy.Pure (f val))
 
-@[inline, simp] private abbrev seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+/- @[inline] -/ @[simp] private abbrev seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
   Proxy.bind pf (Proxy.map · (px ()))
 
-@[inline, simp] abbrev monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure
+/- @[inline] -/ @[simp] abbrev monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure
 
 end Proxy
 
-@[inline] instance : Functor (Proxy a' a b' b m) := { map := Proxy.map }
-@[inline] instance : Pure (Proxy a' a b' b m) := ⟨Proxy.Pure⟩
-@[inline] instance : Seq (Proxy a' a b' b m) := ⟨Proxy.seq⟩
-@[inline] instance : Bind (Proxy a' a b' b m) := ⟨Proxy.bind⟩
-@[inline] instance : Monad (Proxy a' a b' b m) where
-@[inline] instance : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.monadLift⟩
+/- @[inline] -/ instance : Functor (Proxy a' a b' b m) := { map := Proxy.map }
+/- @[inline] -/ instance : Pure (Proxy a' a b' b m) := ⟨Proxy.Pure⟩
+/- @[inline] -/ instance : Seq (Proxy a' a b' b m) := ⟨Proxy.seq⟩
+/- @[inline] -/ instance : Bind (Proxy a' a b' b m) := ⟨Proxy.bind⟩
+/- @[inline] -/ instance : Monad (Proxy a' a b' b m) where
+/- @[inline] -/ instance : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.monadLift⟩
 
-@[inline] instance [MonadState σ m] : MonadState σ (Proxy a' a b' b m) where
+/- @[inline] -/ instance [MonadState σ m] : MonadState σ (Proxy a' a b' b m) where
   get := Proxy.monadLift MonadState.get
   set := Proxy.monadLift ∘ MonadState.set
   modifyGet := Proxy.monadLift ∘ MonadState.modifyGet
 
-@[inline] instance [MonadReader ρ m] : MonadReader ρ (Proxy a' a b' b m) where
+/- @[inline] -/ instance [MonadReader ρ m] : MonadReader ρ (Proxy a' a b' b m) where
   read := Proxy.monadLift MonadReader.read
 
 -------------------------------------------

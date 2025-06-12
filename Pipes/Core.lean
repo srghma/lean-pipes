@@ -12,9 +12,9 @@ namespace Proxy
     | .Pure xr     => pure xr
   termination_by structural eff
 
-@[inline, simp] def respond : b -> Proxy a' a b' b m b' := (Respond · Proxy.Pure)
+/- @[inline] -/ @[simp] def respond : b -> Proxy a' a b' b m b' := (Respond · Proxy.Pure)
 
-@[inline, simp] def forP
+/- @[inline] -/ @[simp] def forP
   (p0 :     Proxy x' x b' b m a')
   (fb : b → Proxy x' x c' c m b') :
             Proxy x' x c' c m a' :=
@@ -30,9 +30,9 @@ infixl:60 " />/ " => fun f g a => f a //> g
 
 -- Backward composition (request category)
 
-@[inline, simp] abbrev request : a' -> Proxy a' a b' b m a := (Request · Proxy.Pure)
+/- @[inline] -/ @[simp] abbrev request : a' -> Proxy a' a b' b m a := (Request · Proxy.Pure)
 
-@[inline, simp] def rofP
+/- @[inline] -/ @[simp] def rofP
   (fb' : b' → Proxy a' a y' y m b)
   (p0 : Proxy b' b y' y m c) :
   Proxy a' a y' y m c :=
@@ -46,11 +46,11 @@ infixl:60 " >\\\\ " => rofP
 
 infixl:60 " \\>\\ " => fun f g a => f >\\ g a
 
-@[inline] def Fueled.push (default : r) : Nat -> a → Proxy a' a a' a m r
+/- @[inline] -/ def Fueled.push (default : r) : Nat -> a → Proxy a' a a' a m r
   | 0 => fun _ => .Pure default
   | n + 1 => (.Respond · (.Request · (Fueled.push default n)))
 
-@[inline] partial def Unbounded.push [Inhabited r] : a -> Proxy a' a a' a m r :=
+/- @[inline] -/ partial def Unbounded.push [Inhabited r] : a -> Proxy a' a a' a m r :=
   (.Respond · (.Request · Unbounded.push))
 
 private inductive ProxyPushRWF (a' a b' b c' c m r) where
@@ -88,7 +88,7 @@ private instance : WellFoundedRelation (ProxyPushRWF a' a b' b c' c m r) where
     | go => exact H1 _ _ (fun _ => H2 _)
 
 mutual
-  @[inline] def pushR.go'
+  /- @[inline] -/ def pushR.go'
     (fb : b → Proxy b' b c' c m r)
     (k : b' → Proxy a' a b' b m r)
     (p : Proxy b' b c' c m r)
@@ -101,7 +101,7 @@ mutual
     termination_by ProxyPushRWF.go k p
     decreasing_by all_goals constructor
 
-  @[inline] def pushR
+  /- @[inline] -/ def pushR
     (fb : b → Proxy b' b c' c m r)
     (p0 : Proxy a' a b' b m r) :
     Proxy a' a c' c m r :=
@@ -118,11 +118,11 @@ infixl:60 " >>~ " => fun x y => pushR y x
 
 infixl:60 " >~> " => fun f g a => f a >>~ g
 
-@[inline] def Fueled.pull (default : r) : Nat -> a' → Proxy a' a a' a m r
+/- @[inline] -/ def Fueled.pull (default : r) : Nat -> a' → Proxy a' a a' a m r
   | 0 => fun _ => .Pure default
   | n + 1 => (.Request · (.Respond · (Fueled.pull default n)))
 
-@[inline] partial def Unbounded.pull [Inhabited r] : a' -> Proxy a' a a' a m r :=
+/- @[inline] -/ partial def Unbounded.pull [Inhabited r] : a' -> Proxy a' a a' a m r :=
   (.Request · (.Respond · Unbounded.pull))
 
 private inductive ProxyPullRWF (a' a b' b c' c m r) where
@@ -159,7 +159,7 @@ private instance : WellFoundedRelation (ProxyPullRWF a' a b' b c' c m r) where
       | .go .. => H1 _ _ (fun _ => H2 _)⟩
 
 mutual
-  @[inline] def pullR.go'
+  /- @[inline] -/ def pullR.go'
     (fb' : b' → Proxy a' a b' b m r)
     (k : b → Proxy b' b c' c m r)
     (p : Proxy a' a b' b m r) :
@@ -172,7 +172,7 @@ mutual
     termination_by ProxyPullRWF.go k p
     decreasing_by all_goals constructor
 
-  @[inline] def pullR
+  /- @[inline] -/ def pullR
     (fb' : b' → Proxy a' a b' b m r)
     (p0 : Proxy b' b c' c m r) :
     Proxy a' a c' c m r :=

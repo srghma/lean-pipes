@@ -10,7 +10,7 @@
 import Batteries.Control.AlternativeMonad
 
 -- Church-encoded Proxy type
-@[inline, simp] def Proxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1) :=
+/- @[inline] -/ @[simp] def Proxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1) :=
   ∀ {s : Type u},
     (a' → (a → s) → s) →                    -- Handle Request (SRequest)
     (b → (b' → s) → s) →                    -- Handle Respond (SRespond)
@@ -19,20 +19,20 @@ import Batteries.Control.AlternativeMonad
     s
 
 -- Basic constructors
-@[inline, simp] def Proxy.Pure (xr : r) : Proxy a' a b' b m r :=
+/- @[inline] -/ @[simp] def Proxy.Pure (xr : r) : Proxy a' a b' b m r :=
   fun _ka _kb _km kp => kp xr
 
-@[inline, simp] def Proxy.Request (xa' : a') (k : a → Proxy a' a b' b m r) : Proxy a' a b' b m r :=
+/- @[inline] -/ @[simp] def Proxy.Request (xa' : a') (k : a → Proxy a' a b' b m r) : Proxy a' a b' b m r :=
   fun ka kb km kp => ka xa' (fun a => k a ka kb km kp)
 
-@[inline, simp] def Proxy.Respond (xb : b) (k : b' → Proxy a' a b' b m r) : Proxy a' a b' b m r :=
+/- @[inline] -/ @[simp] def Proxy.Respond (xb : b) (k : b' → Proxy a' a b' b m r) : Proxy a' a b' b m r :=
   fun ka kb km kp => kb xb (fun b' => k b' ka kb km kp)
 
-@[inline, simp] def Proxy.M (mx : m r) : Proxy a' a b' b m r :=
+/- @[inline] -/ @[simp] def Proxy.M (mx : m r) : Proxy a' a b' b m r :=
   fun _ka _kb km kp => km r kp mx
 
 -- Fold function (trivial for Church encoding)
-@[inline, simp] def foldProxy
+/- @[inline] -/ @[simp] def foldProxy
   (ka : a' → (a → s) → s)
   (kb : b → (b' → s) → s)
   (km : (x : Type u) → (x → s) → m x → s)
@@ -41,24 +41,24 @@ import Batteries.Control.AlternativeMonad
   p ka kb km kp
 
 -- Bind operation
-@[inline, simp] def Proxy.bind
+/- @[inline] -/ @[simp] def Proxy.bind
   (p0 : Proxy a' a b' b m c)
   (f : c → Proxy a' a b' b m d) :
   Proxy a' a b' b m d :=
   fun ka kb km kp =>
     p0 ka kb km (fun c => f c ka kb km kp)
 
-@[inline, simp] def Proxy.map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s := Proxy.bind p (Proxy.Pure ∘ f)
-@[inline, simp] def Proxy.seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s := Proxy.bind pf (Proxy.map · (px ()))
-@[inline, simp] def Proxy.request : a' -> Proxy a' a b' b m a := (Proxy.Request · Proxy.Pure)
-@[inline, simp] def Proxy.respond : b -> Proxy a' a b' b m b' := (Proxy.Respond · Proxy.Pure)
+/- @[inline] -/ @[simp] def Proxy.map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s := Proxy.bind p (Proxy.Pure ∘ f)
+/- @[inline] -/ @[simp] def Proxy.seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s := Proxy.bind pf (Proxy.map · (px ()))
+/- @[inline] -/ @[simp] def Proxy.request : a' -> Proxy a' a b' b m a := (Proxy.Request · Proxy.Pure)
+/- @[inline] -/ @[simp] def Proxy.respond : b -> Proxy a' a b' b m b' := (Proxy.Respond · Proxy.Pure)
 
-@[inline] instance : Functor (Proxy a' a b' b m) := { map := Proxy.map }
-@[inline] instance : Pure (Proxy a' a b' b m) := ⟨Proxy.Pure⟩
-@[inline] instance : Seq (Proxy a' a b' b m) := ⟨Proxy.seq⟩
-@[inline] instance : Bind (Proxy a' a b' b m) := ⟨Proxy.bind⟩
-@[inline] instance : Monad (Proxy a' a b' b m) where
-@[inline] instance : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.M⟩
+/- @[inline] -/ instance : Functor (Proxy a' a b' b m) := { map := Proxy.map }
+/- @[inline] -/ instance : Pure (Proxy a' a b' b m) := ⟨Proxy.Pure⟩
+/- @[inline] -/ instance : Seq (Proxy a' a b' b m) := ⟨Proxy.seq⟩
+/- @[inline] -/ instance : Bind (Proxy a' a b' b m) := ⟨Proxy.bind⟩
+/- @[inline] -/ instance : Monad (Proxy a' a b' b m) where
+/- @[inline] -/ instance : MonadLift m (Proxy a' a b' b m) := ⟨Proxy.M⟩
 
 instance : LawfulMonad (Proxy a' a b' b m) := LawfulMonad.mk'
   (id_map := fun x => by rfl)
@@ -92,15 +92,15 @@ def Proxy.orElse [Monad m] [Alternative m]
       (fun a => pure (kp a))
     km result id (Alternative.orElse mx my)
 
-@[inline] instance [Monad m] [Alternative m] : Alternative (Proxy a' a b' b m) := ⟨Proxy.failure, Proxy.orElse⟩
-@[inline] instance [Monad m] [Alternative m] : AlternativeMonad (Proxy a' a b' b m) where
+/- @[inline] -/ instance [Monad m] [Alternative m] : Alternative (Proxy a' a b' b m) := ⟨Proxy.failure, Proxy.orElse⟩
+/- @[inline] -/ instance [Monad m] [Alternative m] : AlternativeMonad (Proxy a' a b' b m) where
 
-@[inline] instance [MonadState σ m] : MonadState σ (Proxy a' a b' b m) where
+/- @[inline] -/ instance [MonadState σ m] : MonadState σ (Proxy a' a b' b m) where
   get := Proxy.M MonadState.get
   set s := Proxy.M (MonadState.set s)
   modifyGet f := Proxy.M (MonadState.modifyGet f)
 
-@[inline] instance [MonadReader ρ m] : MonadReader ρ (Proxy a' a b' b m) where
+/- @[inline] -/ instance [MonadReader ρ m] : MonadReader ρ (Proxy a' a b' b m) where
   read := Proxy.M MonadReader.read
 
 -- instance [Monad m] [Alternative m] [LawfulAlternative m] : LawfulAlternative (Proxy a' a b' b m) where
@@ -174,7 +174,7 @@ namespace AlternativeTest
 end AlternativeTest
 
 -- Composition operations == forP
-@[inline] def Proxy.composeProxy
+/- @[inline] -/ def Proxy.composeProxy
   (p0 :     Proxy x' x b' b m a')
   (fb : b → Proxy x' x c' c m b') :
             Proxy x' x c' c m a' :=
@@ -184,7 +184,7 @@ end AlternativeTest
       km
       kp
 
-@[inline] def Proxy.composeProxyFlipped
+/- @[inline] -/ def Proxy.composeProxyFlipped
     (fb : b → Proxy x' x c' c m b')
     (p0 :     Proxy x' x b' b m a') :
               Proxy x' x c' c m a' := Proxy.composeProxy p0 fb
@@ -450,7 +450,7 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
              (MonadLift.monadLift (IO.println (toString a))))
 
 -- Composition operations (corresponding to Coq operators)
-@[inline] def Proxy.composeForward
+/- @[inline] -/ def Proxy.composeForward
   (p0 :     Proxy x' x b' b m a')
   (fb : b → Proxy x' x c' c m b') :
             Proxy x' x c' c m a' :=
@@ -460,7 +460,7 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
       km
       kp
 
-@[inline] def Proxy.composeBackward
+/- @[inline] -/ def Proxy.composeBackward
     (fb : b → Proxy x' x c' c m b')
     (p0 :     Proxy x' x b' b m a') :
               Proxy x' x c' c m a' := Proxy.composeForward p0 fb
@@ -469,7 +469,7 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
 -- infixl:60 " //> " => Proxy.composeForward
 -- infixl:60 " <\\\\ " => Proxy.composeBackward
 
-@[inline] def Proxy.pipeOp
+/- @[inline] -/ def Proxy.pipeOp
   {x' x b' b c' c a' α : Type}
   (f : α → Proxy x' x b' b m a')
   (g : b → Proxy x' x c' c m b')
@@ -478,7 +478,7 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
 -- infixl:60 " />/ " => Proxy.pipeOp
 
 -- Forward composition (forP in Coq)
-@[inline] def Proxy.forP
+/- @[inline] -/ def Proxy.forP
   (p0 : Proxy x' x b' b m a')
   (fb : b → Proxy x' x c' c m b') :
   Proxy x' x c' c m a' :=
@@ -489,7 +489,7 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
       kp
 
 -- Backward composition (rofP in Coq)
-@[inline] def Proxy.rofP
+/- @[inline] -/ def Proxy.rofP
   (fb' : b' → Proxy a' a y' y m b)
   (p0 : Proxy b' b y' y m c) :
   Proxy a' a y' y m c :=
@@ -501,7 +501,7 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
       kp
 
 -- Push category - corresponds to pushR in Coq
-@[inline] def Proxy.pushR
+/- @[inline] -/ def Proxy.pushR
   (p0 : Proxy a' a b' b m r)
   (fb : b → Proxy b' b c' c m r) :
   Proxy a' a c' c m r :=
@@ -518,7 +518,7 @@ partial def Proxy.print [ToString a] [MonadLift IO m] [Inhabited r] : Pipe a a m
       kp
 
 -- Pull category - corresponds to pullR in Coq
-@[inline] def Proxy.pullR
+/- @[inline] -/ def Proxy.pullR
   (fb' : b' → Proxy a' a b' b m r)
   (p0 : Proxy b' b c' c m r) :
   Proxy a' a c' c m r :=
