@@ -28,7 +28,7 @@ notation:70 x " ~< " y => y >~ x
 
 @[inline] def Unbounded.cat [Inhabited r] : Pipe a a m r := Unbounded.pull ()
 
-def connect [Inhabited r] -- TODO: prove termination of pullR and pushR and remove [Inhabited r]
+def connect
   (p1 : Proxy a' a PUnit b m r)
   (p2 : Proxy PUnit b c' c m r) :
   Proxy a' a c' c m r :=

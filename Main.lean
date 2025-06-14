@@ -48,6 +48,7 @@ def loop : Effect IO PUnit := Proxy.forP stdinLn fun str => do
 
 end Examples
 
-def main (args : List String) : IO UInt32 := do
+def main (_args : List String) : IO UInt32 := do
+  IO.println s!"Say something:"
   Proxy.runEffect Examples.loop
   return 0
