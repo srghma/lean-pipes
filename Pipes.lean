@@ -376,18 +376,18 @@ end PipesForLaws
     else
       let rec go (current_x : x) (remaining_fuel : Nat) : Pipe a a m r :=
         if remaining_fuel == 0 then
-          Pure d
+          .Pure d
         else
-          Request PUnit.unit fun (input_a : a) =>
-            M (step current_x input_a) fun (next_x : x) =>
-              Respond input_a fun _ =>
+          .Request PUnit.unit fun (input_a : a) =>
+            .M (step current_x input_a) fun (next_x : x) =>
+              .Respond input_a fun _ =>
                 go next_x (remaining_fuel - 1)
         termination_by remaining_fuel
         decreasing_by
         apply Nat.sub_lt
         · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all only [beq_iff_eq]; contradiction)
         · exact Nat.zero_lt_one
-      M begin_x fun (initial_x : x) => go initial_x (fuel - 1)
+      .M begin_x fun (initial_x : x) => go initial_x (fuel - 1)
 
 @[inline] partial def Unbounded.scanWithStateM
   [Inhabited r]
