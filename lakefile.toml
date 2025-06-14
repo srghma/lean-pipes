@@ -9,10 +9,15 @@ defaultTargets = ["Pipes"]
 [[lean_lib]]
 name = "Pipes"
 
+[[require]]
+name = "aesop"
+scope = "leanprover-community"
+git = "https://github.com/leanprover-community/aesop"
+
 # [[require]]
 # name = "mathlib"
 # scope = "leanprover-community"
-#
+
 # [[require]]
 # name = "batteries"
 # scope = "leanprover-community"
@@ -24,6 +29,7 @@ name = "Pipes"
 # rev = "main"
 
 # lake exe test-pipes
+
 [[lean_exe]]
 name = "test-pipes"
 root = "Main"
