@@ -9,14 +9,14 @@ defaultTargets = ["Pipes"]
 [[lean_lib]]
 name = "Pipes"
 
-[[require]]
-name = "mathlib"
-scope = "leanprover-community"
-
-[[require]]
-name = "batteries"
-scope = "leanprover-community"
-rev = "main"
+# [[require]]
+# name = "mathlib"
+# scope = "leanprover-community"
+#
+# [[require]]
+# name = "batteries"
+# scope = "leanprover-community"
+# rev = "main"
 
 # [[require]]
 # name = "LeanCopilot"

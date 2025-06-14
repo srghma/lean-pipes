@@ -37,9 +37,17 @@ def foldConsumer : Producer b Id PUnit -> List b := Id.run (Proxy.fold (fun acc 
 #guard (foldConsumer (Proxy.fromList [1, 2, 3])) = [1, 2, 3]
 
 -- Equivalent of Haskell's `stdinLn :: Producer String IO ()`
-partial def stdinLn : PUnit -> Producer String IO PUnit :=
+partial def stdinLn.go : PUnit -> Producer String IO PUnit :=
   -- BAD: let eof detection: `eof := line == ""; if eof then .Respond line stdinLn else .Pure ()`
-  fun _ => .M (do (← IO.getStdin).getLine) fun line => .Respond line stdinLn
+  fun _ => .M (do (← IO.getStdin).getLine) fun line => .Respond line go
 
-def main : IO PUnit := do
-  Proxy.runEffect (stdinLn ())
+def stdinLn : Producer String IO PUnit := stdinLn.go ()
+
+def loop : Effect IO PUnit := Proxy.forP stdinLn fun str => do
+    Proxy.monadLift (IO.println s!"You said {str}")
+
+end Examples
+
+def main (args : List String) : IO UInt32 := do
+  Proxy.runEffect Examples.loop
+  return 0

@@ -3,11 +3,11 @@
 import Pipes.Core
 import Pipes.Internal
 
-import Aesop
+--### import Aesop
 import Init.Control.State
-import Batteries.Control.AlternativeMonad
-import Mathlib.CategoryTheory.Category.Basic
-import Mathlib.CategoryTheory.Functor.Basic
+--### import Batteries.Control.AlternativeMonad
+--### import Mathlib.CategoryTheory.Category.Basic
+--### import Mathlib.CategoryTheory.Functor.Basic
 
 namespace Proxy
 
@@ -28,7 +28,7 @@ notation:70 x " ~< " y => y >~ x
 
 @[inline] def Unbounded.cat [Inhabited r] : Pipe a a m r := Unbounded.pull ()
 
-def connect [Inhabited r] -- TODO: prove termination of pullR and pushR
+def connect [Inhabited r] -- TODO: prove termination of pullR and pushR and remove [Inhabited r]
   (p1 : Proxy a' a PUnit b m r)
   (p2 : Proxy PUnit b c' c m r) :
   Proxy a' a c' c m r :=
@@ -101,7 +101,7 @@ def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
   xs.forM respond
 
 @[inline] def every (xs : List b) : Producer b m PUnit :=
-  xs.foldlM (fun _ x => respond x) ()
+  xs.foldlM (fun _ => respond) ()
 
 namespace PipesForLaws
 theorem for_yield_f (f : b → Proxy x' x c' c m PUnit) (x_val : b) :
@@ -789,7 +789,7 @@ namespace PipesLawsPrelude
 
 open Proxy
 
-lemma for_yield_general (s : Proxy x' x PUnit b m r) :
+theorem for_yield_general (s : Proxy x' x PUnit b m r) :
   s //> (respond : b → Proxy x' x PUnit b m PUnit) = s := by
   induction s with
   | Request xa' k ih =>

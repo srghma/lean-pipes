@@ -244,7 +244,7 @@ namespace Examples
 
     def interpret : (F ConsoleF α) -> IO α := F.iterM interpreter
 
-    #eval interpret exampleProgram
+    -- #eval interpret exampleProgram
 
   end ConsoleIO
 

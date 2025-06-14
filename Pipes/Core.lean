@@ -4,7 +4,7 @@ import Pipes.Internal
 
 namespace Proxy
 
-@[always_inline, inline] def runEffect [Monad m] (eff : Proxy PEmpty a b' PEmpty m r) : m r :=
+def runEffect [Monad m] (eff : Proxy PEmpty a b' PEmpty m r) : m r :=
   match eff with
     | .Request x _ => PEmpty.elim x
     | .Respond x _ => PEmpty.elim x
@@ -12,9 +12,9 @@ namespace Proxy
     | .Pure xr     => pure xr
   termination_by structural eff
 
-/- @[inline] -/ @[simp] def respond : b -> Proxy a' a b' b m b' := (Respond · Proxy.Pure)
+@[inline, simp] def respond : b -> Proxy a' a b' b m b' := (Respond · Proxy.Pure)
 
-/- @[inline] -/ @[simp] def forP
+def forP
   (p0 :     Proxy x' x b' b m a')
   (fb : b → Proxy x' x c' c m b') :
             Proxy x' x c' c m a' :=
@@ -30,9 +30,9 @@ infixl:60 " />/ " => fun f g a => f a //> g
 
 -- Backward composition (request category)
 
-/- @[inline] -/ @[simp] abbrev request : a' -> Proxy a' a b' b m a := (Request · Proxy.Pure)
+@[inline, simp] abbrev request : a' -> Proxy a' a b' b m a := (Request · Proxy.Pure)
 
-/- @[inline] -/ @[simp] def rofP
+def rofP
   (fb' : b' → Proxy a' a y' y m b)
   (p0 : Proxy b' b y' y m c) :
   Proxy a' a y' y m c :=
@@ -46,11 +46,11 @@ infixl:60 " >\\\\ " => rofP
 
 infixl:60 " \\>\\ " => fun f g a => f >\\ g a
 
-/- @[inline] -/ def Fueled.push (default : r) : Nat -> a → Proxy a' a a' a m r
+def Fueled.push (default : r) : Nat -> a → Proxy a' a a' a m r
   | 0 => fun _ => .Pure default
   | n + 1 => (.Respond · (.Request · (Fueled.push default n)))
 
-/- @[inline] -/ partial def Unbounded.push [Inhabited r] : a -> Proxy a' a a' a m r :=
+partial def Unbounded.push [Inhabited r] : a -> Proxy a' a a' a m r :=
   (.Respond · (.Request · Unbounded.push))
 
 mutual
@@ -79,13 +79,14 @@ infixl:60 " >>~ " => fun x y => pushR y x
 
 infixl:60 " >~> " => fun f g a => f a >>~ g
 
-/- @[inline] -/ def Fueled.pull (default : r) : Nat -> a' → Proxy a' a a' a m r
+def Fueled.pull (default : r) : Nat -> a' → Proxy a' a a' a m r
   | 0 => fun _ => .Pure default
   | n + 1 => (.Request · (.Respond · (Fueled.pull default n)))
 
-/- @[inline] -/ partial def Unbounded.pull [Inhabited r] : a' -> Proxy a' a a' a m r :=
+partial def Unbounded.pull [Inhabited r] : a' -> Proxy a' a a' a m r :=
   (.Request · (.Respond · Unbounded.pull))
 
+-- TODO: prove termination of pullR and pushR https://leanprover.zulipchat.com/#narrow/channel/270676-lean4/topic/lean-pipes.3A.20could.20someone.20help.20me.20finish.3F/near/523176122
 mutual
   partial def pullR.go' [Inhabited r]
     (requestfb : b → Proxy b' b c' c m r)
@@ -203,7 +204,7 @@ theorem respondDistrib [Monad m] [LawfulMonad m]
 --     simp_all only
 --     sorry
 
-lemma respondZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): Proxy.forP (.Pure someR) f = .Pure someR := by rfl
+theorem respondZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): Proxy.forP (.Pure someR) f = .Pure someR := by rfl
 
 -- theorem respondZero  {a' a b' b c r : Type u} {m : Type u → Type u} (f : c → Proxy a' a b' b m r) : .Pure />/ f = .Pure := by rfl
 
@@ -245,7 +246,7 @@ theorem requestDistrib
 --    simp_all only
 --    sorry
 
-lemma requestZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): Proxy.rofP f (.Pure someR) = .Pure someR := by rfl
+theorem requestZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): Proxy.rofP f (.Pure someR) = .Pure someR := by rfl
 
 -- theorem requestZero (f : c → Proxy a' a b' b m r) : f \>\ .Pure = .Pure := by rfl
 
@@ -369,6 +370,7 @@ theorem requestComp (f : a → Proxy a' a b' b m r)
   reflect ∘ (f \>\ g) = (Proxy.reflect ∘ g) />/ (Proxy.reflect ∘ f) := by
   simp [Proxy.bind, Proxy.reflect, Proxy.respond, Proxy.request, Proxy.rofP, Proxy.forP]
   funext x
+  simp_all only [Function.comp_apply]
   sorry
 
 theorem respondId : Proxy.reflect ∘ Proxy.respond = @Proxy.request a' a b' b m := by
@@ -382,18 +384,16 @@ theorem respondComp (f : a → Proxy a' a b' b m r)
   simp [Proxy.reflect, Proxy.forP, Proxy.rofP]
   induction (f x) with
   | Request a' k ih =>
-    simp [Proxy.bind, Proxy.reflect]
-    funext a
-    exact ih a
+    simp [Proxy.bind, Proxy.reflect, Proxy.forP, Proxy.rofP]
+    simp_all only
   | Respond b k ih =>
     simp [Proxy.bind, Proxy.reflect, Proxy.respond, Proxy.request, Proxy.rofP, Proxy.forP, ih]
     sorry
   | M mx k ih =>
-    simp [Proxy.bind, Proxy.reflect]
-    funext x
-    exact ih x
+    simp [Proxy.bind, Proxy.reflect, Proxy.forP, Proxy.rofP]
+    simp_all only
   | Pure r =>
-    simp [Proxy.bind, Proxy.reflect]
+    simp [Proxy.bind, Proxy.reflect, Proxy.forP, Proxy.rofP]
 
 theorem distributivity (f : a → Proxy a' a b' b m r)
                        (g : r → Proxy a' a b' b m r) :
