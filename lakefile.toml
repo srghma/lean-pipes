@@ -18,9 +18,9 @@ git = "https://github.com/leanprover-community/aesop"
 name = "Canonical"
 scope = "chasenorman"
 
-[[require]]
-name = "mathlib"
-scope = "leanprover-community"
+# [[require]]
+# name = "mathlib"
+# scope = "leanprover-community"
 
 # [[require]]
 # name = "batteries"
