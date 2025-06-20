@@ -3,6 +3,7 @@
 import Pipes.Core
 import Pipes.Internal
 
+import Canonical
 import Aesop
 import Init.Control.State
 --### import Batteries.Control.AlternativeMonad
@@ -105,14 +106,27 @@ def next [Monad m] (p : Producer b m r) : ProxyNextStep b m r :=
 
 namespace PipesForLaws
 theorem for_yield_f (f : b → Proxy x' x c' c m PUnit) (x_val : b) :
-  yield x_val //> f = f x_val := by
-  simp only [forP, Proxy.yield, Proxy.respond]
-  sorry
+  Proxy.yield x_val //> f = f x_val := by
+  simp_all [Proxy.yield, Proxy.await]
+  induction f x_val with
+  | Pure a' => rfl
+  | Respond b k ih =>
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+  | Request x' k ih =>
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+  | M mx ih =>
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
 
 theorem for_yield (s : Proxy x' x PUnit b m PUnit) :
-  s //> yield = s := by
-  simp only [Proxy.forP, Proxy.yield, Proxy.respond]
-  sorry
+  s //> Proxy.yield = s := by
+  induction s with
+  | Pure a' => rfl
+  | Respond b k ih =>
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+  | Request x' k ih =>
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+  | M mx ih =>
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
 
 theorem nested_for_a
   (s : Proxy x' x b' b m a')
@@ -120,7 +134,31 @@ theorem nested_for_a
   (g : c -> Proxy x' x d' d m c') :
   -- forP s (fun a => Proxy.forP (f a) g) = Proxy.forP (Proxy.forP s f) g := by
   (s //> (f />/ g)) = ((s //> f) //> g) := by
-  sorry
+    induction s with
+    | Pure a' => rfl
+    | Respond b1 k1 ih1 =>
+      simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      induction f b1 with
+      | Pure a' => rfl
+      | Respond b2 k2 ih2 =>
+        simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+        induction g b2 with
+        | Pure a' =>
+          simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+        | Respond b2 k2 ih2 =>
+          simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+        | Request x' k ih =>
+          simp_all [Bind.bind]
+        | M mx ih =>
+          simp_all [Bind.bind]
+      | Request x' k ih =>
+        simp_all [Bind.bind]
+      | M mx ih =>
+        simp_all [Bind.bind]
+    | Request x' k ih =>
+      simp_all [Bind.bind]
+    | M mx ih =>
+      simp_all [Bind.bind]
 
 theorem nested_for_b
   (s : Proxy x' x b' b m a')
@@ -849,6 +887,7 @@ theorem for_yield_general (s : Proxy x' x PUnit b m r) :
 theorem map_id {a : Type} (d : r) (fuel : Nat) :
   Fueled.mapPipe (a := a) (b := a) (m := m) d fuel (fun x => x) = Fueled.cat d fuel := by
   -- apply for_yield_general
+  -- simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect, Proxy.yield, Proxy.await]
   sorry
 
 theorem map_compose [Inhabited r] -- TODO: prove termination of pullR and pushR

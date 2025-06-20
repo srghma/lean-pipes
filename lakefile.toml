@@ -14,9 +14,13 @@ name = "aesop"
 scope = "leanprover-community"
 git = "https://github.com/leanprover-community/aesop"
 
-# [[require]]
-# name = "mathlib"
-# scope = "leanprover-community"
+[[require]]
+name = "Canonical"
+scope = "chasenorman"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
 
 # [[require]]
 # name = "batteries"

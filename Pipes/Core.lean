@@ -1,10 +1,11 @@
--- import Aesop
+import Aesop
 -- import Mathlib.CategoryTheory.Category.Basic
 import Pipes.Internal
+import Canonical
 
 namespace Proxy
 
-def runEffect [Monad m] (eff : Proxy PEmpty a b' PEmpty m r) : m r :=
+@[simp] def runEffect [Monad m] (eff : Proxy PEmpty a b' PEmpty m r) : m r :=
   match eff with
     | .Request x _ => PEmpty.elim x
     | .Respond x _ => PEmpty.elim x
@@ -14,7 +15,7 @@ def runEffect [Monad m] (eff : Proxy PEmpty a b' PEmpty m r) : m r :=
 
 @[inline, simp] def respond : b -> Proxy a' a b' b m b' := (Respond · Proxy.Pure)
 
-def forP
+@[simp] def forP
   (p0 :     Proxy x' x b' b m a')
   (fb : b → Proxy x' x c' c m b') :
             Proxy x' x c' c m a' :=
@@ -32,7 +33,7 @@ infixl:60 " />/ " => fun f g a => f a //> g
 
 @[inline, simp] abbrev request : a' -> Proxy a' a b' b m a := (Request · Proxy.Pure)
 
-def rofP
+@[simp] def rofP
   (fb' : b' → Proxy a' a y' y m b)
   (p0 : Proxy b' b y' y m c) :
   Proxy a' a y' y m c :=
@@ -88,7 +89,7 @@ instance : WellFoundedRelation (ProxyPushRWF a' a b' b c' c m r) where
     | go => exact H1 _ _ (fun _ => H2 _)
 
 mutual
-  def pushR.go'
+  @[simp] def pushR.go'
     (fb' : b' → Proxy a' a b' b m r)
     (p : Proxy b' b c' c m r)
     : Proxy a' a c' c m r :=
@@ -100,7 +101,7 @@ mutual
     termination_by ProxyPushRWF.go fb' p
     decreasing_by all_goals constructor
 
-  def pushR
+  @[simp] def pushR
     (fb : b → Proxy b' b c' c m r)
     (p0 : Proxy a' a b' b m r) :
     Proxy a' a c' c m r :=
@@ -158,7 +159,7 @@ instance : WellFoundedRelation (ProxyPullRWF a' a b' b c' c m r) where
       | .go .. => H1 _ _ (fun _ => H2 _)⟩
 
 mutual
-  def pullR.go'
+  @[simp] def pullR.go'
     (requestfb : b → Proxy b' b c' c m r)
     (p :         Proxy a' a b' b m r) :
                  Proxy a' a c' c m r :=
@@ -170,7 +171,7 @@ mutual
   termination_by ProxyPullRWF.go requestfb p
   decreasing_by all_goals constructor
 
-  def pullR
+  @[simp] def pullR
     (fb' : b' → Proxy a' a b' b m r)
     (p0 :       Proxy b' b c' c m r) :
                 Proxy a' a c' c m r :=
@@ -188,7 +189,7 @@ infixl:60 " +>> " => pullR
 infixl:60 " >+> " => fun f g a => f +>> g a
 
 -- Reflect operation (dual)
-def reflect (p : Proxy a' a b' b m r) : Proxy b b' a a' m r :=
+@[simp] def reflect (p : Proxy a' a b' b m r) : Proxy b b' a a' m r :=
   match p with
   | .Request xa' k => .Respond xa' (fun a => (k a).reflect)
   | .Respond xb k => .Request xb (fun b' => (k b').reflect)
@@ -235,23 +236,28 @@ theorem respondDistrib [Monad m] [LawfulMonad m]
   (h : b → Proxy x' x c' c m b') :
   (f >=> g) />/ h = (f />/ h) >=> (g />/ h) := by
   funext a
-  simp_all only [(· >=> ·)]
+  simp_all [(· >=> ·), Proxy.forP, Bind.bind]
   induction f a with
   | Pure a' => rfl
   | Respond b k ih =>
-    simp_all only [Proxy.forP]
-    sorry
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    induction h b with
+    | Pure a' => rfl
+    | Respond b k ih =>
+      simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    | Request x' k ih =>
+      simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    | M mx ih =>
+      simp_all [(· >=> ·), Proxy.forP, Bind.bind]
   | Request x' k ih =>
-    simp_all only [Proxy.forP]
-    sorry
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
   | M mx ih =>
-    simp_all only [Proxy.forP]
-    sorry
+    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
 
 -- instance RespondCategory {x' x : Type u} :
 --   CategoryTheory.Category (Type u × Type u) where
 --   Hom A B := A.2 → Proxy x' x A.1 A.2 m B.1
---   id A := respond
+--   id A := Proxy.respond
 --   comp f g := fun a => f a />/ g
 --   id_comp := by
 --     intro A B f
@@ -274,7 +280,7 @@ theorem respondDistrib [Monad m] [LawfulMonad m]
 --     simp_all only
 --     sorry
 
-theorem respondZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): Proxy.forP (.Pure someR) f = .Pure someR := by rfl
+theorem respondZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): (Proxy.Pure />/ f) someR = Proxy.Pure someR := by rfl
 
 -- theorem respondZero  {a' a b' b c r : Type u} {m : Type u → Type u} (f : c → Proxy a' a b' b m r) : .Pure />/ f = .Pure := by rfl
 
@@ -288,37 +294,54 @@ theorem requestDistrib
   (h : b' → Proxy a' a y' y m b) :
   h \>\ (f >=> g) = (h \>\ f) >=> (h \>\ g) := by
   funext x
-  sorry
+  simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind]
+  induction f x with
+  | Pure a' => rfl
+  | Respond b k ih =>
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind]
+  | Request x' k ih =>
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind]
+    induction h x' with
+    | Pure a' => rfl
+    | Respond b k ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind]
+    | Request x' k ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind]
+    | M mx ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind]
+  | M mx ih =>
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind]
 
---instance RequestCategory {y' y : Type u} :
---  CategoryTheory.Category (Type u × Type u) where
---  Hom A B := A.1 → Proxy B.1 B.2 y' y m A.2
---  id A := request
---  comp f g := f \>\ g
---  id_comp := by
---    intro A B f
---    funext z
---    aesop?
---  comp_id := by
---    intro A B f
---    funext z
---    obtain ⟨fst, snd⟩ := A
---    obtain ⟨fst_1, snd_1⟩ := B
---    simp_all only
---    sorry
---  assoc := by
---    intro A B C D f g h
---    funext z
---    obtain ⟨fst, snd⟩ := A
---    obtain ⟨fst_1, snd_1⟩ := B
---    obtain ⟨fst_2, snd_2⟩ := C
---    obtain ⟨fst_3, snd_3⟩ := D
---    simp_all only
---    sorry
+-- instance RequestCategory {y' y : Type u} :
+--   CategoryTheory.Category (Type u × Type u) where
+--   Hom A B := A.1 → Proxy B.1 B.2 y' y m A.2
+--   id A := Proxy.request
+--   comp f g a := f >\\ g a
+--   id_comp := by
+--     intro A B f
+--     funext z
+--     aesop?
+--   comp_id := by
+--     intro A B f
+--     funext z
+--     obtain ⟨fst, snd⟩ := A
+--     obtain ⟨fst_1, snd_1⟩ := B
+--     simp_all only
+--     sorry
+--   assoc := by
+--     intro A B C D f g h
+--     funext z
+--     obtain ⟨fst, snd⟩ := A
+--     obtain ⟨fst_1, snd_1⟩ := B
+--     obtain ⟨fst_2, snd_2⟩ := C
+--     obtain ⟨fst_3, snd_3⟩ := D
+--     simp_all only
+--     sorry
 
-theorem requestZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): Proxy.rofP f (.Pure someR) = .Pure someR := by rfl
+theorem requestZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): f >\\ (Proxy.Pure someR) = .Pure someR := by rfl
+theorem requestZeroImpl' (someR : r) (f : c → Proxy a' a b' b m r): (f \>\ Proxy.Pure) someR = Proxy.Pure someR := by rfl
 
--- theorem requestZero (f : c → Proxy a' a b' b m r) : f \>\ .Pure = .Pure := by rfl
+-- theorem requestZero (f : c → Proxy a' a b' b m r) : f \>\ Proxy.Pure = Proxy.Pure := by sorry
 
 end RequestCategory
 
@@ -329,15 +352,14 @@ theorem pushRequest [Inhabited r]
   (g : a → Proxy a' a b' b m r)
   (x : _) :
   .Request x g >>~ f = Proxy.Request x (g >~> f) := by
-  simp [*]
-  sorry
+    simp_all [Proxy.pushR]
 
 theorem pushM [Inhabited r]
   (f : b → Proxy b' b c' c m r)
   (g : x → Proxy a' a b' b m r)
   (h : m x) :
   .M h g >>~ f = Proxy.M h (g >~> f) := by
-    sorry
+    simp_all [Proxy.pushR]
 
 -- Push Category instance
 -- instance PushCategory [Inhabited r] :
@@ -374,16 +396,14 @@ theorem pullRespond [Inhabited r]
     (g : c' → Proxy b' b c' c m r)
     (x : c) :
   f +>> .Respond x g = Proxy.Respond x (f >+> g) := by
-    simp_all only
-    sorry
+    simp_all [Proxy.pullR]
 
 theorem pullM [Inhabited r]
     (f : b' → Proxy a' a b' b m r)
     (g : x → Proxy b' b c' c m r)
     (h : m x) :
   f +>> .M h g = Proxy.M h (f >+> g) := by
-    simp_all only
-    sorry
+    simp_all [Proxy.pullR]
 
 -- instance PullCategory [Inhabited r] :
 --   CategoryTheory.Category (Type u × Type u) where
@@ -411,13 +431,20 @@ theorem pullM [Inhabited r]
 --     simp_all only
 --     sorry
 
-theorem pushPullAssoc [Inhabited r]
+theorem pushPullAssoc'
   (f : b' → Proxy a' a b' b m r)
-  (g : a → Proxy b' b c' c m r)
-  (h : c → Proxy c' c b' b m r) :
+  (g : a  → Proxy b' b c' c m r)
+  (h : c  → Proxy c' c b' b m r)
+  (xa : a) :
+  (f +>> g xa >>~ h) = f +>> g xa >>~ h := by
+  -- ((f >+> g) >~> h) xa = (f >+> (g >~> h)) xa := by
+    rfl
+
+theorem pushPullAssoc [Monad m] [LawfulMonad m]
+  (f : b' → Proxy a' a b' b m r)
+  (g : a  → Proxy b' b c' c m r)
+  (h : c  → Proxy c' c b' b m r) :
   (f >+> g) >~> h = f >+> (g >~> h) := by
-  funext x
-  simp [Proxy.pushR, Proxy.pullR]
   sorry
 
 end PullCategory
@@ -433,15 +460,42 @@ theorem requestId : Proxy.reflect ∘ Proxy.request = @Proxy.respond a' a b' b m
 theorem reflectDistrib (f : a → Proxy a' a b' b m r)
                        (g : r → Proxy a' a b' b m r) (x : a) :
   Proxy.reflect (f x >>= g) = Proxy.reflect (f x) >>= (Proxy.reflect ∘ g) := by
-  sorry
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    induction f x with
+    | Pure a' =>
+      simp_all only [Proxy.bind]
+      rfl
+    | Respond b k ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    | Request x' k ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    | M mx ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
 
 theorem requestComp (f : a → Proxy a' a b' b m r)
                     (g : a → Proxy a r b' b m r) :
-  reflect ∘ (f \>\ g) = (Proxy.reflect ∘ g) />/ (Proxy.reflect ∘ f) := by
+  Proxy.reflect ∘ (f \>\ g) = (Proxy.reflect ∘ g) />/ (Proxy.reflect ∘ f) := by
   simp [Proxy.bind, Proxy.reflect, Proxy.respond, Proxy.request, Proxy.rofP, Proxy.forP]
   funext x
-  simp_all only [Function.comp_apply]
-  sorry
+  simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+  induction g x with
+  | Pure a' =>
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+  | Respond b k ih =>
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+  | Request x' k ih =>
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    induction f x' with
+    | Pure a' =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    | Respond b k ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    | Request x' k ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    | M mx ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+  | M mx ih =>
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
 
 theorem respondId : Proxy.reflect ∘ Proxy.respond = @Proxy.request a' a b' b m := by
   funext x
@@ -457,8 +511,18 @@ theorem respondComp (f : a → Proxy a' a b' b m r)
     simp [Proxy.bind, Proxy.reflect, Proxy.forP, Proxy.rofP]
     simp_all only
   | Respond b k ih =>
-    simp [Proxy.bind, Proxy.reflect, Proxy.respond, Proxy.request, Proxy.rofP, Proxy.forP, ih]
-    sorry
+    simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    induction (g b) with
+    | Request a' k ih =>
+      simp [Proxy.bind, Proxy.reflect, Proxy.forP, Proxy.rofP]
+      simp_all only
+    | Respond b k ih =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
+    | M mx k ih =>
+      simp [Proxy.bind, Proxy.reflect, Proxy.forP, Proxy.rofP]
+      simp_all only
+    | Pure r =>
+      simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect]
   | M mx k ih =>
     simp [Proxy.bind, Proxy.reflect, Proxy.forP, Proxy.rofP]
     simp_all only
@@ -467,8 +531,7 @@ theorem respondComp (f : a → Proxy a' a b' b m r)
 
 theorem distributivity (f : a → Proxy a' a b' b m r)
                        (g : r → Proxy a' a b' b m r) :
-  Proxy.reflect ∘ (f >=> g) = (Proxy.reflect ∘ f) >=> (Proxy.reflect ∘ g) := by
-  sorry -- reflectDistrib f g
+  Proxy.reflect ∘ (f >=> g) = (Proxy.reflect ∘ f) >=> (Proxy.reflect ∘ g) := funext (reflectDistrib f g)
 
 theorem zeroLaw (x : r) : Proxy.reflect (pure x : Proxy a' a b' b m r) = (pure x : Proxy b b' a a' m r) := by
   simp [pure, Proxy.reflect]
