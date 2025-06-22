@@ -90,7 +90,7 @@ instance : WellFoundedRelation (ProxyPushRWF a' a b' b c' c m r) where
     | go => exact H1 _ _ (fun _ => H2 _)
 
 mutual
-  @[simp] def pushR.go'
+  def pushR.go'
     (fb' : b' → Proxy a' a b' b m r)
     (p : Proxy b' b c' c m r)
     : Proxy a' a c' c m r :=
@@ -102,7 +102,7 @@ mutual
     termination_by ProxyPushRWF.go fb' p
     decreasing_by all_goals constructor
 
-  @[simp] def pushR
+  def pushR
     (fb : b → Proxy b' b c' c m r)
     (p0 : Proxy a' a b' b m r) :
     Proxy a' a c' c m r :=
@@ -160,7 +160,7 @@ instance : WellFoundedRelation (ProxyPullRWF a' a b' b c' c m r) where
       | .go .. => H1 _ _ (fun _ => H2 _)⟩
 
 mutual
-  @[simp] def pullR.go'
+  def pullR.go'
     (requestfb : b → Proxy b' b c' c m r)
     (p :         Proxy a' a b' b m r) :
                  Proxy a' a c' c m r :=
@@ -172,7 +172,7 @@ mutual
   termination_by ProxyPullRWF.go requestfb p
   decreasing_by all_goals constructor
 
-  @[simp] def pullR
+  def pullR
     (fb' : b' → Proxy a' a b' b m r)
     (p0 :       Proxy b' b c' c m r) :
                 Proxy a' a c' c m r :=

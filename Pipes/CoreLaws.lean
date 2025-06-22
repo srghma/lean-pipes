@@ -1,16 +1,14 @@
 import Aesop
+import Canonical
 -- import Mathlib.CategoryTheory.Category.Basic
 import Pipes.Internal
 import Pipes.Core
-import Pipes.CoreLawsPullGo
-import Pipes.CoreLawsPushGo
+import Pipes.CoreLaws.PullGo
+import Pipes.CoreLaws.PushGo
 import Canonical
 import Mathlib.Data.Nat.Init
 
 namespace PipesLawsCore
-
-universe u
-variable (a' a b' b : Type u) (m : Type u -> Type u)
 
 -- Respond Category
 section RespondCategory
@@ -123,25 +121,19 @@ end RequestCategory
 
 section PushCategory
 
-theorem pushRequest
+@[simp] theorem pushRequest
   (f : b → Proxy b' b c' c m r)
   (g : a → Proxy a' a b' b m r)
   (x : a') :
   Proxy.Request x g >>~ f = Proxy.Request x (g >~> f) := by simp_all
 
-theorem pushRequest'
+@[simp] theorem pushRequest'
   (f : b → Proxy b' b c' c m r)
   (g : a → Proxy a' a b' b m r)
   (x : a') :
   Proxy.pushR f (Proxy.Request x g) = Proxy.Request x (fun a => Proxy.pushR f (g a)) := by simp
 
-theorem pushRequest''
-  (f : b → Proxy b' b c' c m r)
-  (g : a → Proxy a' a b' b m r)
-  (x : a') :
-  Proxy.pushR f (Proxy.Request x g) = Proxy.Request x (fun a => Proxy.pushR f (g a)) := by simp
-
-theorem pushM
+@[simp] theorem pushM
   (f : b → Proxy b' b c' c m r)
   (g : x → Proxy a' a b' b m r)
   (h : m x) :
@@ -177,13 +169,13 @@ end PushCategory
 -- Pull Category
 section PullCategory
 
-theorem pullRespond
+@[simp] theorem pullRespond
     (f : b' → Proxy a' a b' b m r)
     (g : c' → Proxy b' b c' c m r)
     (x : c) :
   f +>> Proxy.Respond x g = Proxy.Respond x (f >+> g) := by simp
 
-theorem pullM
+@[simp] theorem pullM
     (f : b' → Proxy a' a b' b m r)
     (g : x → Proxy b' b c' c m r)
     (h : m x) :
@@ -394,35 +386,73 @@ theorem pushPullAssoc'' {r c' c b : Type u} [Monad m]
     apply ih
     · simp [measure_g]; exact Nat.zero_lt_one
 
+theorem add_comm''':
+  ∀ a b: Prop, a /\ b -> b /\ a := by
+  intros a b H
+  let H1: a := H.left
+  let H2: b := H.right
+  exact And.intro H2 H1
+
+theorem add_comm:
+  ∀ a b: Prop, a /\ b -> b /\ a := by
+    exact fun a b a_1 ↦ ⟨a_1.right, a_1.left⟩
+
+theorem add_comm':
+  ∀ a b: Prop, a /\ b -> b /\ a := by
+  intro a b H
+  match H with
+  | ⟨a', b'⟩ => exact ⟨b', a'⟩
+
+theorem add_comm'':
+  ∀ a b: Prop, a /\ b -> b /\ a := by
+  intro a b
+  intro
+  | ⟨a', b'⟩ => exact ⟨b', a'⟩
+
+theorem add_comm'''':
+  ∀ a b: Prop, a /\ b -> b /\ a := by
+  intro a b H
+  let res : b /\ a := ⟨H.right, H.left⟩
+  cases H
+  rename a => l
+  let l2 := l
+  rename b => r
+  let myh := l = l2
+  show (b /\ a)
+  -- clear l
+  -- revert l
+  sorry
+
 --------------------------------
-theorem pushPullAssoc' {r c' c b : Type u}
+theorem pushPullAssoc' {r a' a c' c b b' : Type u}
   (f : b' → Proxy a' a b' b m r)
   (g : a  → Proxy b' b c' c m r)
   (h : c  → Proxy c' c b' b m r)
   (xa : a) :
-  let gxa := g xa
+  have gxa := g xa
   ((f +>> gxa) >>~ h) = f +>> (gxa >>~ h) := by
+    simp
     induction g xa with -- 1
     | Pure a' => simp
     | M mx ih => simp_all
-    | Respond b k ih =>
+    | Respond b1 k1 ih1 =>
       simp only
       rw [pullRespond]
-      simp_all
-      induction h b with
+      simp at ih1
+      simp
+      induction h b1 with
       | Pure a' => simp_all [Proxy.pushR]
       | M mx ih => simp_all [Proxy.pushR]
       | Respond b k ih => simp_all [Proxy.pushR]
       | Request x'2 k2 ih2 =>
         simp_all [Proxy.pushR]
-        induction k x'2 with -- 3
+        induction k1 x'2 with -- 3
         | Pure a' => simp_all [Proxy.pushR]
         | M mx ih => simp_all [Proxy.pushR]
         | Respond b3 k3 ih3 =>
           rw [pullRespond]
           simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
-          rw [← pullR_request]
-          sorry
+          sorry -- Proxy.pushR.go' (fun a_1 => f +>> k3 a_1) (k2 b3) = f +>> Proxy.pushR.go' k3 (k2 b3)
         | Request x'3 k3 ih3 =>
           simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
           generalize hg : g xa = gx
@@ -493,8 +523,6 @@ theorem pushPullAssoc [Monad m] [LawfulMonad m]
 end PullCategory
 
 section Duals
-
-variable {a' a b' b r : Type u} {m : Type u → Type u}
 
 theorem requestId : Proxy.reflect ∘ Proxy.request = @Proxy.respond a' a b' b m := by
   funext x
