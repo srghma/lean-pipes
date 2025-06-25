@@ -386,50 +386,6 @@ theorem pushPullAssoc'' {r c' c b : Type u} [Monad m]
     apply ih
     · simp [measure_g]; exact Nat.zero_lt_one
 
-theorem add_comm''':
-  ∀ a b: Prop, a /\ b -> b /\ a := by
-  intros a b H
-  let H1: a := H.left
-  let H2: b := H.right
-  exact And.intro H2 H1
-
-theorem add_comm:
-  ∀ a b: Prop, a /\ b -> b /\ a := by
-    exact fun a b a_1 ↦ ⟨a_1.right, a_1.left⟩
-
-theorem add_comm':
-  ∀ a b: Prop, a /\ b -> b /\ a := by
-  intro a b H
-  match H with
-  | ⟨a', b'⟩ => exact ⟨b', a'⟩
-
-theorem add_comm'':
-  ∀ a b: Prop, a /\ b -> b /\ a := by
-  intro a b
-  intro
-  | ⟨a', b'⟩ => exact ⟨b', a'⟩
-
-theorem add_comm'''':
-  ∀ a b: Prop, a /\ b -> b /\ a := by
-  intro a b H
-  let res : b /\ a := ⟨H.right, H.left⟩
-  cases H
-  rename a => l
-  let l2 := l
-  rename b => r
-  let myh := l = l2
-  show (b /\ a)
-  -- clear l
-  -- revert l
-  sorry
-
-theorem and_comm':
-  ∀ a b: Prop, a /\ b -> b /\ a := by
-  intros a b H
-  cases H with
-  | intro H1 H2 =>
-    apply And.intro sorry H1
-
 --------------------------------
 theorem pushPullAssoc' {r a' a c' c b b' : Type u}
   (f : b' → Proxy a' a b' b m r)
