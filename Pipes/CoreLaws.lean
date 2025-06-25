@@ -131,7 +131,7 @@ section PushCategory
   (f : b → Proxy b' b c' c m r)
   (g : a → Proxy a' a b' b m r)
   (x : a') :
-  Proxy.pushR f (Proxy.Request x g) = Proxy.Request x (fun a => Proxy.pushR f (g a)) := by simp
+  Proxy.pushR (Proxy.Request x g) f = Proxy.Request x (fun a => Proxy.pushR (g a) f) := by simp
 
 @[simp] theorem pushM
   (f : b → Proxy b' b c' c m r)
@@ -423,40 +423,41 @@ theorem add_comm'''':
   -- revert l
   sorry
 
+theorem and_comm':
+  ∀ a b: Prop, a /\ b -> b /\ a := by
+  intros a b H
+  cases H with
+  | intro H1 H2 =>
+    apply And.intro sorry H1
+
 --------------------------------
 theorem pushPullAssoc' {r a' a c' c b b' : Type u}
   (f : b' → Proxy a' a b' b m r)
-  (g : a  → Proxy b' b c' c m r)
-  (h : c  → Proxy c' c b' b m r)
-  (xa : a) :
-  have gxa := g xa
+  (gxa : Proxy b' b c' c m r)
+  (h : c  → Proxy c' c b' b m r) (xc' : c') :
   ((f +>> gxa) >>~ h) = f +>> (gxa >>~ h) := by
-    simp
-    induction g xa with -- 1
+    induction gxa with -- 1
     | Pure a' => simp
     | M mx ih => simp_all
     | Respond b1 k1 ih1 =>
-      simp only
-      rw [pullRespond]
-      simp at ih1
-      simp
-      induction h b1 with
-      | Pure a' => simp_all [Proxy.pushR]
-      | M mx ih => simp_all [Proxy.pushR]
-      | Respond b k ih => simp_all [Proxy.pushR]
-      | Request x'2 k2 ih2 =>
-        simp_all [Proxy.pushR]
-        induction k1 x'2 with -- 3
-        | Pure a' => simp_all [Proxy.pushR]
-        | M mx ih => simp_all [Proxy.pushR]
-        | Respond b3 k3 ih3 =>
-          rw [pullRespond]
-          simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
-          sorry -- Proxy.pushR.go' (fun a_1 => f +>> k3 a_1) (k2 b3) = f +>> Proxy.pushR.go' k3 (k2 b3)
-        | Request x'3 k3 ih3 =>
-          simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
-          generalize hg : g xa = gx
-          sorry
+      specialize ih1 xc'
+      rw [pullRespond]; dsimp
+      sorry
+      -- induction h b1 with
+      -- | Pure a'2 => simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      -- | M mx2 ih2 Hih2 => simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      -- | Respond b2 k2 ih2 => simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      -- | Request x'2 k2 ih2 =>
+      --   simp_all [Proxy.pushR]
+      --   induction k1 x'2 with -- 3
+      --   | Pure a'3 => simp_all [Proxy.pushR]
+      --   | M mx3 ih3 => simp_all [Proxy.pushR]
+      --   | Respond b3 k3 ih3 =>
+      --     rw [pullRespond]; dsimp
+      --     sorry -- Proxy.pushR.go' (fun a_1 => f +>> k3 a_1) (k2 b3) = f +>> Proxy.pushR.go' k3 (k2 b3)
+      --   | Request x'3 k3 ih3 =>
+      --     simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      --     sorry
           /- theorem pushRequest -/
           /-   (f : b → Proxy b' b c' c m r) -/
           /-   (g : a → Proxy a' a b' b m r) -/

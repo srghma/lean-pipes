@@ -10,3 +10,7 @@ tactic cheatsheet:
 custom_let custom_have https://github.com/leanprover-community/lean4-metaprogramming-book
 
 ALL BOOKS https://leanprover-community.github.io/learn.html
+
+-----
+
+funext https://github.com/funexists/coq-lean-cheatsheet?tab=readme-ov-file
