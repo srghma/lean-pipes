@@ -7,6 +7,7 @@ import Pipes.CoreLaws.PullGo
 import Pipes.CoreLaws.PushGo
 import Canonical
 import Mathlib.Data.Nat.Init
+import Init.Ext
 
 namespace PipesLawsCore
 
@@ -196,90 +197,40 @@ section PushCategory
 
 -- Push Category instance
 
--- variable
---   (Hpull : ∀ (n : ℕ) (d : r) (xa : a),
---     Proxy.Fueled.pull (a := a) (m := m) d n xa = Proxy.Fueled.pull d (n + 1) xa)
---   (Hpush : ∀ (n : ℕ) (d : r) (xa : a),
---     Proxy.Fueled.push (a' := a') (m := m) d n xa = Proxy.Fueled.push d (n + 1) xa)
 
   -- [Monad m] [LawfulMonad m]
 
-lemma Unbounded.pushR_push_simplify [Inhabited r] (x : a) :
-  Proxy.Unbounded.push (a' := a') (m := m) (r := r) x >>~ Proxy.Unbounded.push =
-  Proxy.Unbounded.push x := by
-  induction Proxy.Unbounded.push (a' := a') (m := m) (r := r) x with
-  | Pure xr => simp_all
-  | M mx k ih => simp_all
-  | Request a k ih => simp_all
-  | Respond x'2 k2 ih2 =>
-    simp_all
-    induction Proxy.Unbounded.push (a' := a') (m := m) (r := r) x'2 with
-    | Pure xr => sorry
-    | M mx k ih => sorry
-    | Request a k ih => sorry
-    | Respond x'3 k3 ih3 =>
-      sorry
-
-
-lemma Fueled.pushR_push_simplify (fuel : ℕ) (default : r) (x : a) :
-  fuel ≠ 0 →
-  Proxy.Fueled.push (a' := a') (m := m) default fuel x >>~ Proxy.Fueled.push default fuel =
-  Proxy.Fueled.push default fuel x := by
-  intro h_pos
-  cases' Nat.exists_eq_succ_of_ne_zero h_pos with n hn
-  subst hn
-  simp only [Proxy.Fueled.push]
-  simp only [Proxy.pushR]
-  sorry
-
+-- lemma Fueled.pushR_push_simplify (fuel : ℕ) (default : r) (x : a) :
+--   Proxy.Fueled.push (a' := a') (m := m) default fuel x >>~ Proxy.Fueled.push default fuel =
+--   Proxy.Fueled.push default fuel x := by
+--   induction fuel with
+--   | zero =>
+--     simp [Proxy.Fueled.push]
+--   | succ fuel' ih =>
+--     simp [Proxy.Fueled.push, Proxy.pushR, ih]
+--     funext xa'
+--     congr 1
+--     sorry
 
     --   -- rcases Nat.exists_eq_succ_of_ne_zero fueledPushFuelIsPositive with ⟨fueledPushFuel', rfl⟩
 
 -- unsafe def Proxy.Unbounded.push {a a' r m} [Inhabited r] : a -> Proxy a' a a' a m r :=
 --   (.Respond · (.Request · Proxy.Unbounded.push))
 
-lemma Unbounded.push_unfold [Inhabited r] (x : a) :
-  Proxy.Unbounded.push (a := a) (a' := a') (r := r) (m := m) x =
-  (Proxy.Respond x (Proxy.Request · Proxy.Unbounded.push)) := by
-  aesop?
+axiom Hpull {r a m} (n : ℕ) (d : r) (xa' : a') :
+    Proxy.Fueled.pull (a := a) (m := m) d n xa' = Proxy.Fueled.pull d (n + 1) xa'
 
-def Unbounded.PushCategory {r : Type u} {m : Type u → Type u} [Inhabited r] :
-  CategoryTheory.Category (Type u × Type u) where
-  Hom A B := B.2 → Proxy B.1 B.2 A.1 A.2 m r
-  id A := Proxy.Unbounded.push
-  comp f g := g >~> f --  fun a => g a >>~ f
-  id_comp := by
-    intro ⟨b', b⟩ ⟨a', a⟩ f
-    funext arg
-    simp only [Prod.fst, Prod.snd] at f arg
-    dsimp
-    -- rename_i rr rr1 rr2 rr3 rr4
-    induction f arg with
-    | Pure r => simp_all
-    | Request a k ih => simp_all
-    | M mx k ih => simp_all
-    | Respond xb k ih =>
-      -- Now, goal is: pushR.go k (Request xb (fun b => Respond b (fun b' => Pure default))) = Respond xb k
-      -- So we now do induction on `Proxy.Unbounded.push xb`
-      induction Proxy.Unbounded.push (r := r) xb with
-      | Request xb2 xcont2 ih2 =>
-        rw [Proxy.Unbounded.push]
-        sorry
-      | Respond x k2 => simp_all
-      | M mx k2 => simp_all
-      | Pure r => simp_all
-  comp_id := sorry
-  assoc := sorry
+axiom Hpush (n : ℕ) (d : r) :
+    Proxy.Fueled.push (a := a) (a' := a') (m := m) d (n + 1) = Proxy.Fueled.push d n
 
 variable
   (r : Type u)  (m : Type u → Type u)
-  (fueledPushDefault : r) (fueledPushFuel : Nat)
-  (fueledPushFuelIsPositive : ¬fueledPushFuel = 0)
+  (default : r) (fuel : Nat) (fuelNE0 : fuel + 1 ≠ 0)
     [Inhabited r] in
 instance Fueled.PushCategory :
   CategoryTheory.Category (Type u × Type u) where
   Hom A B := B.2 → Proxy B.1 B.2 A.1 A.2 m r
-  id A := Proxy.Fueled.push fueledPushDefault fueledPushFuel
+  id A := Proxy.Fueled.push default fuel
   comp f g := g >~> f --  fun a => g a >>~ f
   id_comp := by
     intro ⟨b', b⟩ ⟨a', a⟩ f
@@ -291,21 +242,17 @@ instance Fueled.PushCategory :
     | Request a k ih => simp_all
     | M mx k ih => simp_all
     | Respond xb k ih =>
-      rcases Nat.exists_eq_succ_of_ne_zero fueledPushFuelIsPositive with ⟨fueledPushFuel', hfueledPushFuel'⟩
-      cases' Nat.exists_eq_succ_of_ne_zero fueledPushFuelIsPositive with n' hn'
-      subst hn'
-      simp only [Proxy.Fueled.push, Proxy.pushR.go]
-      simp_all
-      funext karg
-      induction k karg with
-      | Pure xr => simp_all
-      | M mx k ih => simp_all
-      | Request a k ih => simp_all
-      | Respond x'2 k2 ih2 =>
-        simp_all
-        sorry
+      rw [← Hpush]
+      induction h : fuel + 1 with
+      | zero => contradiction
+      | succ fuel' ih2 =>
+        -- generalize h :  Proxy.Fueled.push default fuel' = xxx
+        rw [Hpush]
+        exact ih2
   comp_id := sorry
   assoc := sorry
+
+#print Proxy.pushR.eq_def
 
 end PushCategory
 
