@@ -2,6 +2,7 @@
 -- Import modules here that should be built as part of the library.
 import Pipes.Core
 import Pipes.Internal
+import Pipes.CoreLaws
 
 import Canonical
 import Aesop
@@ -137,16 +138,16 @@ theorem nested_for_a
     induction s with
     | Pure a' => rfl
     | Respond b1 k1 ih1 =>
-      simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
       induction f b1 with
       | Pure a' => rfl
       | Respond b2 k2 ih2 =>
-        simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+        simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
         induction g b2 with
         | Pure a' =>
-          simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+          simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
         | Respond b2 k2 ih2 =>
-          simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+          simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
         | Request x' k ih =>
           simp_all [Bind.bind]
         | M mx ih =>
@@ -887,7 +888,7 @@ theorem for_yield_general (s : Proxy x' x PUnit b m r) :
 theorem map_id {a : Type} (d : r) (fuel : Nat) :
   Fueled.mapPipe (a := a) (b := a) (m := m) d fuel (fun x => x) = Fueled.cat d fuel := by
   -- apply for_yield_general
-  -- simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go', (· ∘ ·), Proxy.reflect, Proxy.yield, Proxy.await]
+  -- simp_all [(· >=> ·), Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, (· ∘ ·), Proxy.reflect, Proxy.yield, Proxy.await]
   sorry
 
 theorem map_compose [Inhabited r] -- TODO: prove termination of pullR and pushR

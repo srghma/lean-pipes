@@ -48,11 +48,11 @@ infixl:60 " >\\\\ " => rofP
 
 infixl:60 " \\>\\ " => fun f g a => f >\\ g a
 
-def Fueled.push (default : r) : Nat -> a → Proxy a' a a' a m r
+def Fueled.push {a a' m r} (default : r) : Nat -> a → Proxy a' a a' a m r
   | 0 => fun _ => .Pure default
   | n + 1 => (.Respond · (.Request · (Fueled.push default n)))
 
-partial def Unbounded.push [Inhabited r] : a -> Proxy a' a a' a m r :=
+partial def Unbounded.push {a a' r m} [Inhabited r] : a -> Proxy a' a a' a m r :=
   (.Respond · (.Request · Unbounded.push))
 
 inductive ProxyPushRWF (a' a b' b c' c m r) where
@@ -90,14 +90,14 @@ instance : WellFoundedRelation (ProxyPushRWF a' a b' b c' c m r) where
     | go => exact H1 _ _ (fun _ => H2 _)
 
 mutual
-  def pushR.go'
+  def pushR.go
     (fb' : b' → Proxy a' a b' b m r)
     (p : Proxy b' b c' c m r)
     : Proxy a' a c' c m r :=
     match p with
     | .Request xb' fb => pushR (fb' xb') fb
-    | .Respond xc fc' => .Respond xc (fun c' => pushR.go' fb' (fc' c'))
-    | .M mx kx => .M mx (fun x => pushR.go' fb' (kx x))
+    | .Respond xc fc' => .Respond xc (fun c' => pushR.go fb' (fc' c'))
+    | .M mx kx => .M mx (fun x => pushR.go fb' (kx x))
     | .Pure xr => .Pure xr
     termination_by ProxyPushRWF.go fb' p
     decreasing_by all_goals constructor
@@ -108,7 +108,7 @@ mutual
     Proxy a' a c' c m r :=
     match p0 with
     | .Request xa' k => .Request xa' (fun a => pushR (k a) fb)
-    | .Respond xb fb' => pushR.go' fb' (fb xb)
+    | .Respond xb fb' => pushR.go fb' (fb xb)
     | .M t f => .M t (fun x => pushR (f x) fb)
     | .Pure xr => .Pure xr
     termination_by (.reg p0 : ProxyPushRWF a' a b' b c' c m r)
@@ -160,14 +160,14 @@ instance : WellFoundedRelation (ProxyPullRWF a' a b' b c' c m r) where
       | .go .. => H1 _ _ (fun _ => H2 _)⟩
 
 mutual
-  def pullR.go'
+  def pullR.go
     (requestfb : b → Proxy b' b c' c m r)
     (p :         Proxy a' a b' b m r) :
                  Proxy a' a c' c m r :=
     match p with
-    | .Request a' fa => .Request a' (fun a => pullR.go' requestfb (fa a))
+    | .Request a' fa => .Request a' (fun a => pullR.go requestfb (fa a))
     | .Respond b fb' => pullR fb' (requestfb b)
-    | .M t f => .M t (fun x => pullR.go' requestfb (f x))
+    | .M t f => .M t (fun x => pullR.go requestfb (f x))
     | .Pure r => .Pure r
   termination_by ProxyPullRWF.go requestfb p
   decreasing_by all_goals constructor
@@ -177,7 +177,7 @@ mutual
     (p0 :       Proxy b' b c' c m r) :
                 Proxy a' a c' c m r :=
     match p0 with
-    | .Request xb' fb => pullR.go' fb (fb' xb')
+    | .Request xb' fb => pullR.go fb (fb' xb')
     | .Respond c fc' => .Respond c (fun c' => pullR fb' (fc' c'))
     | .M t f => .M t (fun x => pullR fb' (f x))
     | .Pure r => .Pure r

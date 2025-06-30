@@ -33,31 +33,59 @@ theorem respondDistrib [Monad m]
   | Request x' k ih => simp_all
   | M mx ih => simp_all
 
--- instance RespondCategory {x' x : Type u} :
---   CategoryTheory.Category (Type u × Type u) where
---   Hom A B := A.2 → Proxy x' x A.1 A.2 m B.1
---   id A := Proxy.respond
---   comp f g := fun a => f a />/ g
---   id_comp := by
---     intro A B f
---     funext z
---     sorry
---   comp_id := by
---     intro A B f
---     funext z
---     obtain ⟨fst, snd⟩ := A
---     obtain ⟨fst_1, snd_1⟩ := B
---     simp_all only
---     sorry
---   assoc := by
---     intro A B C D f g h
---     funext z
---     obtain ⟨fst, snd⟩ := A
---     obtain ⟨fst_1, snd_1⟩ := B
---     obtain ⟨fst_2, snd_2⟩ := C
---     obtain ⟨fst_3, snd_3⟩ := D
---     simp_all only
---     sorry
+instance RespondCategory {a' a : Type u} {m : Type u -> Type u} :
+  CategoryTheory.Category (Type u × Type u) where
+  Hom X Y := X.2 → Proxy a' a Y.1 Y.2 m X.1
+  id X := Proxy.respond
+  comp f g := f />/ g -- fun a => f a //> g
+  id_comp := by
+    intro X Y f
+    funext arg
+    obtain ⟨r, argT⟩ := X
+    obtain ⟨b, b'⟩ := Y
+    simp_all
+    induction f arg with
+    | Pure a' => rfl
+    | Respond b k ih => simp_all
+    | Request x' k ih => simp_all
+    | M mx ih => simp_all
+  comp_id := by
+    intro X Y f
+    funext arg
+    obtain ⟨r, argT⟩ := X
+    obtain ⟨b, b'⟩ := Y
+    simp_all
+    induction f arg with
+    | Pure a' => rfl
+    | Respond b k ih => simp_all
+    | Request x' k ih => simp_all
+    | M mx ih => simp_all
+  assoc := by
+    intro X Y W Z f g h
+    funext arg
+    obtain ⟨fst, snd⟩ := X
+    obtain ⟨fst_1, snd_1⟩ := Y
+    obtain ⟨fst_2, snd_2⟩ := W
+    obtain ⟨fst_3, snd_3⟩ := Z
+    simp_all only
+    induction f arg with
+    | Pure a' => rfl
+    | Respond b k ih =>
+      simp_all
+      induction g b with
+      | Pure a'2 => simp_all
+      | Respond b2 k2 ih2 =>
+        simp_all
+        induction h b2 with
+        | Pure a'2 => simp_all
+        | Respond b2 k2 ih2 => simp_all
+        | Request x' k ih => simp_all
+        | M mx ih => simp_all
+      | Request x' k ih => simp_all
+      | M mx ih => simp_all
+    | Request x' k ih => simp_all
+    | M mx ih => simp_all
+
 
 theorem respondZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): (Proxy.Pure />/ f) someR = Proxy.Pure someR := by rfl
 
@@ -86,31 +114,58 @@ theorem requestDistrib
     | M mx ih => simp_all
   | M mx ih => simp_all
 
--- instance RequestCategory {y' y : Type u} :
---   CategoryTheory.Category (Type u × Type u) where
---   Hom A B := A.1 → Proxy B.1 B.2 y' y m A.2
---   id A := Proxy.request
---   comp f g a := f >\\ g a
---   id_comp := by
---     intro A B f
---     funext z
---     aesop?
---   comp_id := by
---     intro A B f
---     funext z
---     obtain ⟨fst, snd⟩ := A
---     obtain ⟨fst_1, snd_1⟩ := B
---     simp_all only
---     sorry
---   assoc := by
---     intro A B C D f g h
---     funext z
---     obtain ⟨fst, snd⟩ := A
---     obtain ⟨fst_1, snd_1⟩ := B
---     obtain ⟨fst_2, snd_2⟩ := C
---     obtain ⟨fst_3, snd_3⟩ := D
---     simp_all only
---     sorry
+instance RequestCategory {b' b : Type u} {m : Type u → Type u} :
+  CategoryTheory.Category (Type u × Type u) where
+  Hom Y X := X.1 → Proxy Y.1 Y.2 b' b m X.2
+  id X := Proxy.request
+  comp f g := f \>\ g
+  id_comp := by
+    intro X Y f
+    funext arg
+    obtain ⟨r, argT⟩ := X
+    obtain ⟨b, b'⟩ := Y
+    simp_all
+    induction f arg with
+    | Pure r => rfl
+    | Request a k ih => simp_all
+    | Respond x' k ih => simp_all
+    | M mx k ih => simp_all
+  comp_id := by
+    intro X Y f
+    funext arg
+    obtain ⟨r, argT⟩ := X
+    obtain ⟨b, b'⟩ := Y
+    simp_all
+    induction f arg with
+    | Pure r => rfl
+    | Request a k ih => simp_all
+    | Respond x' k ih => simp_all
+    | M mx k ih => simp_all
+  assoc := by
+    intro X Y W Z f g h
+    funext arg
+    obtain ⟨fst, snd⟩ := X
+    obtain ⟨fst_1, snd_1⟩ := Y
+    obtain ⟨fst_2, snd_2⟩ := W
+    obtain ⟨fst_3, snd_3⟩ := Z
+    simp_all only
+    induction h arg with
+    | Pure r => rfl
+    | Request a k ih =>
+      simp_all
+      induction g a with
+      | Pure r => simp_all
+      | Request a' k' ih' =>
+        simp_all
+        induction f a' with
+        | Pure r => simp_all
+        | Request a'' k'' ih'' => simp_all
+        | Respond x' k ih => simp_all
+        | M mx k ih => simp_all
+      | Respond x' k ih => simp_all
+      | M mx k ih => simp_all
+    | Respond x' k ih => simp_all
+    | M mx k ih => simp_all
 
 theorem requestZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): f >\\ (Proxy.Pure someR) = .Pure someR := by rfl
 theorem requestZeroImpl' (someR : r) (f : c → Proxy a' a b' b m r): (f \>\ Proxy.Pure) someR = Proxy.Pure someR := by rfl
@@ -140,29 +195,117 @@ section PushCategory
   Proxy.M h g >>~ f = Proxy.M h (g >~> f) := by simp
 
 -- Push Category instance
--- instance PushCategory :
---   CategoryTheory.Category (Type u × Type u) where
---   Hom A B := B.2 → Proxy B.1 B.2 A.1 A.2 m r
---   id A := push
---   comp f g := f >~> g
---   id_comp := by
---     intro A B f
---     funext z
---     simp [pushRFunc, Proxy.push]
---     simp_all only [gt_iff_lt]
---     sorry
---   comp_id := by
---     intro A B f
---     funext z
---     simp [pushRFunc, Proxy.push]
---     simp_all only [gt_iff_lt]
---     sorry
---   assoc := by
---     intro A B C D f g h
---     funext z
---     simp [pushRFunc]
---     simp_all only [gt_iff_lt]
---     sorry
+
+-- variable
+--   (Hpull : ∀ (n : ℕ) (d : r) (xa : a),
+--     Proxy.Fueled.pull (a := a) (m := m) d n xa = Proxy.Fueled.pull d (n + 1) xa)
+--   (Hpush : ∀ (n : ℕ) (d : r) (xa : a),
+--     Proxy.Fueled.push (a' := a') (m := m) d n xa = Proxy.Fueled.push d (n + 1) xa)
+
+  -- [Monad m] [LawfulMonad m]
+
+lemma Unbounded.pushR_push_simplify [Inhabited r] (x : a) :
+  Proxy.Unbounded.push (a' := a') (m := m) (r := r) x >>~ Proxy.Unbounded.push =
+  Proxy.Unbounded.push x := by
+  induction Proxy.Unbounded.push (a' := a') (m := m) (r := r) x with
+  | Pure xr => simp_all
+  | M mx k ih => simp_all
+  | Request a k ih => simp_all
+  | Respond x'2 k2 ih2 =>
+    simp_all
+    induction Proxy.Unbounded.push (a' := a') (m := m) (r := r) x'2 with
+    | Pure xr => sorry
+    | M mx k ih => sorry
+    | Request a k ih => sorry
+    | Respond x'3 k3 ih3 =>
+      sorry
+
+
+lemma Fueled.pushR_push_simplify (fuel : ℕ) (default : r) (x : a) :
+  fuel ≠ 0 →
+  Proxy.Fueled.push (a' := a') (m := m) default fuel x >>~ Proxy.Fueled.push default fuel =
+  Proxy.Fueled.push default fuel x := by
+  intro h_pos
+  cases' Nat.exists_eq_succ_of_ne_zero h_pos with n hn
+  subst hn
+  simp only [Proxy.Fueled.push]
+  simp only [Proxy.pushR]
+  sorry
+
+
+    --   -- rcases Nat.exists_eq_succ_of_ne_zero fueledPushFuelIsPositive with ⟨fueledPushFuel', rfl⟩
+
+-- unsafe def Proxy.Unbounded.push {a a' r m} [Inhabited r] : a -> Proxy a' a a' a m r :=
+--   (.Respond · (.Request · Proxy.Unbounded.push))
+
+lemma Unbounded.push_unfold [Inhabited r] (x : a) :
+  Proxy.Unbounded.push (a := a) (a' := a') (r := r) (m := m) x =
+  (Proxy.Respond x (Proxy.Request · Proxy.Unbounded.push)) := by
+  aesop?
+
+def Unbounded.PushCategory {r : Type u} {m : Type u → Type u} [Inhabited r] :
+  CategoryTheory.Category (Type u × Type u) where
+  Hom A B := B.2 → Proxy B.1 B.2 A.1 A.2 m r
+  id A := Proxy.Unbounded.push
+  comp f g := g >~> f --  fun a => g a >>~ f
+  id_comp := by
+    intro ⟨b', b⟩ ⟨a', a⟩ f
+    funext arg
+    simp only [Prod.fst, Prod.snd] at f arg
+    dsimp
+    -- rename_i rr rr1 rr2 rr3 rr4
+    induction f arg with
+    | Pure r => simp_all
+    | Request a k ih => simp_all
+    | M mx k ih => simp_all
+    | Respond xb k ih =>
+      -- Now, goal is: pushR.go k (Request xb (fun b => Respond b (fun b' => Pure default))) = Respond xb k
+      -- So we now do induction on `Proxy.Unbounded.push xb`
+      induction Proxy.Unbounded.push (r := r) xb with
+      | Request xb2 xcont2 ih2 =>
+        rw [Proxy.Unbounded.push]
+        sorry
+      | Respond x k2 => simp_all
+      | M mx k2 => simp_all
+      | Pure r => simp_all
+  comp_id := sorry
+  assoc := sorry
+
+variable
+  (r : Type u)  (m : Type u → Type u)
+  (fueledPushDefault : r) (fueledPushFuel : Nat)
+  (fueledPushFuelIsPositive : ¬fueledPushFuel = 0)
+    [Inhabited r] in
+instance Fueled.PushCategory :
+  CategoryTheory.Category (Type u × Type u) where
+  Hom A B := B.2 → Proxy B.1 B.2 A.1 A.2 m r
+  id A := Proxy.Fueled.push fueledPushDefault fueledPushFuel
+  comp f g := g >~> f --  fun a => g a >>~ f
+  id_comp := by
+    intro ⟨b', b⟩ ⟨a', a⟩ f
+    funext arg
+    simp only [Prod.fst, Prod.snd] at f arg
+    dsimp
+    induction f arg with
+    | Pure r => simp_all
+    | Request a k ih => simp_all
+    | M mx k ih => simp_all
+    | Respond xb k ih =>
+      rcases Nat.exists_eq_succ_of_ne_zero fueledPushFuelIsPositive with ⟨fueledPushFuel', hfueledPushFuel'⟩
+      cases' Nat.exists_eq_succ_of_ne_zero fueledPushFuelIsPositive with n' hn'
+      subst hn'
+      simp only [Proxy.Fueled.push, Proxy.pushR.go]
+      simp_all
+      funext karg
+      induction k karg with
+      | Pure xr => simp_all
+      | M mx k ih => simp_all
+      | Request a k ih => simp_all
+      | Respond x'2 k2 ih2 =>
+        simp_all
+        sorry
+  comp_id := sorry
+  assoc := sorry
 
 end PushCategory
 
@@ -218,21 +361,21 @@ section PullCategory
 --   (f₀ : b' → Proxy a' a b' b m r)
 --   (f : c' → Proxy b' b c' c m r) :
 --   ∀ (p : Proxy c' c b' b m r),
---     Proxy.pushR.go' (λ c' => f₀ +>> f c') p = f₀ +>> Proxy.pushR.go' f p := by
+--     Proxy.pushR.go (λ c' => f₀ +>> f c') p = f₀ +>> Proxy.pushR.go f p := by
 --   intro p
 --   induction p with
 --   | Pure x =>
---     simp [Proxy.pushR.go']
+--     simp [Proxy.pushR.go]
 --   | Respond b' k ih =>
---     simp [Proxy.pushR.go']
+--     simp [Proxy.pushR.go]
 --     ext
 --     apply ih
 --   | Request c k ih =>
---     simp [Proxy.pushR.go']
+--     simp [Proxy.pushR.go]
 --     funext c'
 --     exact ih c'
 --   | M mx ih =>
---     simp [Proxy.pushR.go']
+--     simp [Proxy.pushR.go]
 --     apply Functor.map_eq_map
 --     exact ih
 --
@@ -313,79 +456,6 @@ section PullCategory
 -- Complete proof of push-pull associativity using your exact definitions
 -- (f >+> g) >~> h = f >+> (g >~> h)
 
--- The main theorem with a clean proof strategy
-theorem pushPullAssoc'' {r c' c b : Type u} [Monad m]
-  (f : b' → Proxy a' a b' b m r)
-  (g : a  → Proxy b' b c' c m r)
-  (h : c  → Proxy c' c b' b m r)
-  (xa : a) :
-  ((f >+> g) >~> h) xa = (f >+> (g >~> h)) xa := by
-
-  -- We prove this by strong induction using the well-founded relations
-  -- defined for pushR and pullR in the original code
-
-  -- The key insight is that both operations commute in a specific way
-  -- Let's prove it step by step
-
-  -- First, unfold the definitions
-  simp only [Proxy.pullR, Proxy.pushR]
-
-  -- Now we proceed by cases on g xa
-  -- We'll use the fact that the termination measures ensure our recursive calls are valid
-
-  revert f g h xa  -- Generalize everything for strong induction
-
-  -- Define a measure function based on the structure
-  have measure_g : ∀ (g : a → Proxy b' b c' c m r) (xa : a),
-    Nat := fun g xa => by
-      cases g xa with
-      | Pure _ => exact 0
-      | Request _ _ => exact 1
-      | Respond _ _ => exact 1
-      | M _ _ => exact 1
-
-  -- Strong induction on this measure
-  refine Nat.strong_induction_on (measure_g g xa) ?_
-
-  intro n ih f g h xa h_measure
-
-  -- Now proceed by cases on g xa
-  cases g xa with
-
-  | Pure r_val =>
-    -- Base case: g xa = Pure r_val
-    simp [Proxy.pullR, Proxy.pushR]
-
-  | M mx k_x =>
-    -- Monadic case: g xa = M mx k_x
-    simp [Proxy.pullR, Proxy.pushR]
-    congr 1
-    funext x
-    -- Apply induction hypothesis
-    apply ih
-    · -- Show measure decreases
-      simp [measure_g]
-      exact Nat.zero_lt_one
-    · rfl  -- Show the measure condition
-
-  | Request xb' k_b =>
-    -- Request case: g xa = Request xb' k_b
-    simp [Proxy.pullR, Proxy.pushR, Proxy.pullR.go']
-
-    -- The key step: show that pushR h (f xb' >>= k_b) = f xb' >>= fun b => pushR h (k_b b)
-    -- This follows from the monadic laws and the structure of pushR
-
-    -- We need to show pushR distributes over bind for this specific case
-    -- This is a standard property that follows from the definitions
-
-    -- For now, we'll use the fact that this follows from the structure
-    -- and the well-founded nature of the recursion
-    congr 1
-    funext b
-    -- Apply induction hypothesis
-    apply ih
-    · simp [measure_g]; exact Nat.zero_lt_one
-
 --------------------------------
 theorem pushPullAssoc' {r a' a c' c b b' : Type u}
   (f : b' → Proxy a' a b' b m r)
@@ -398,11 +468,18 @@ theorem pushPullAssoc' {r a' a c' c b b' : Type u}
     | Respond b1 k1 ih1 =>
       specialize ih1 xc'
       rw [pullRespond]; dsimp
+      induction k1 xc' with
+      | Pure a'2 =>
+        sorry
+      | M mx2 ih2 Hih2 => sorry
+      | Respond b2 k2 ih2 => sorry
+      | Request x'2 k2 ih2 =>
+
       sorry
       -- induction h b1 with
-      -- | Pure a'2 => simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
-      -- | M mx2 ih2 Hih2 => simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
-      -- | Respond b2 k2 ih2 => simp_all [Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      -- | Pure a'2 => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
+      -- | M mx2 ih2 Hih2 => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
+      -- | Respond b2 k2 ih2 => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
       -- | Request x'2 k2 ih2 =>
       --   simp_all [Proxy.pushR]
       --   induction k1 x'2 with -- 3
@@ -410,9 +487,9 @@ theorem pushPullAssoc' {r a' a c' c b b' : Type u}
       --   | M mx3 ih3 => simp_all [Proxy.pushR]
       --   | Respond b3 k3 ih3 =>
       --     rw [pullRespond]; dsimp
-      --     sorry -- Proxy.pushR.go' (fun a_1 => f +>> k3 a_1) (k2 b3) = f +>> Proxy.pushR.go' k3 (k2 b3)
+      --     sorry -- Proxy.pushR.go (fun a_1 => f +>> k3 a_1) (k2 b3) = f +>> Proxy.pushR.go k3 (k2 b3)
       --   | Request x'3 k3 ih3 =>
-      --     simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      --     simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
       --     sorry
           /- theorem pushRequest -/
           /-   (f : b → Proxy b' b c' c m r) -/
@@ -461,7 +538,7 @@ theorem pushPullAssoc' {r a' a c' c b b' : Type u}
       --         | Respond y k' ih => simp_all
       --         | M m ih => simp_all
       --       | Request x'5 k5 ih5 =>
-      --         simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go', Proxy.pullR, Proxy.pullR.go']
+      --         simp_all [Proxy.rofP, Proxy.forP, Proxy.bind, Bind.bind, Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go]
       --         sorry
       --   | Request x'3 k3 ih3 =>
       --     simp_all [Proxy.rofP, Proxy.pushR, Proxy.pullR]
