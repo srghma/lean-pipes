@@ -88,9 +88,7 @@ instance RespondCategory {a' a : Type u} {m : Type u -> Type u} :
     | M mx ih => simp_all
 
 
-theorem respondZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): (Proxy.Pure />/ f) someR = Proxy.Pure someR := by rfl
-
--- theorem respondZero  {a' a b' b c r : Type u} {m : Type u → Type u} (f : c → Proxy a' a b' b m r) : .Pure />/ f = .Pure := by rfl
+theorem respondZero (someR : r) (f : c → Proxy a' a b' b m r): (Proxy.Pure />/ f) someR = Proxy.Pure someR := by rfl
 
 end RespondCategory
 
@@ -145,11 +143,12 @@ instance RequestCategory {b' b : Type u} {m : Type u → Type u} :
   assoc := by
     intro X Y W Z f g h
     funext arg
-    obtain ⟨fst, snd⟩ := X
-    obtain ⟨fst_1, snd_1⟩ := Y
-    obtain ⟨fst_2, snd_2⟩ := W
-    obtain ⟨fst_3, snd_3⟩ := Z
-    simp_all only
+    obtain ⟨Xb', Xb⟩ := X
+    obtain ⟨Ya', Ya⟩ := Y
+    obtain ⟨Wb', Wb⟩ := W
+    obtain ⟨Za', Za⟩ := Z
+    simp only [Prod.fst, Prod.snd] at g h f arg
+    dsimp
     induction h arg with
     | Pure r => rfl
     | Request a k ih =>
@@ -168,28 +167,25 @@ instance RequestCategory {b' b : Type u} {m : Type u → Type u} :
     | Respond x' k ih => simp_all
     | M mx k ih => simp_all
 
-theorem requestZeroImpl (someR : r) (f : c → Proxy a' a b' b m r): f >\\ (Proxy.Pure someR) = .Pure someR := by rfl
-theorem requestZeroImpl' (someR : r) (f : c → Proxy a' a b' b m r): (f \>\ Proxy.Pure) someR = Proxy.Pure someR := by rfl
-
--- theorem requestZero (f : c → Proxy a' a b' b m r) : f \>\ Proxy.Pure = Proxy.Pure := by sorry
+theorem requestZero (someR : r) (f : c → Proxy a' a b' b m r): (f \>\ Proxy.Pure) someR = Proxy.Pure someR := by rfl
 
 end RequestCategory
 
 section PushCategory
 
-@[simp] theorem pushRequest
+theorem pushRequest
   (f : b → Proxy b' b c' c m r)
   (g : a → Proxy a' a b' b m r)
   (x : a') :
   Proxy.Request x g >>~ f = Proxy.Request x (g >~> f) := by simp_all
 
-@[simp] theorem pushRequest'
+theorem pushRequest'
   (f : b → Proxy b' b c' c m r)
   (g : a → Proxy a' a b' b m r)
   (x : a') :
   Proxy.pushR (Proxy.Request x g) f = Proxy.Request x (fun a => Proxy.pushR (g a) f) := by simp
 
-@[simp] theorem pushM
+theorem pushM
   (f : b → Proxy b' b c' c m r)
   (g : x → Proxy a' a b' b m r)
   (h : m x) :
@@ -197,32 +193,80 @@ section PushCategory
 
 -- Push Category instance
 
+private axiom pushAssumeInfinityByDefinition [Inhabited r] : ∀ xa, Proxy.Unbounded.push (a := a) (a' := a') (m := m) (r := r) xa =
+  (.Respond xa (fun x => .Request x (Proxy.Unbounded.push)))
 
-  -- [Monad m] [LawfulMonad m]
+def Unbounded.PushCategory [Inhabited r] (m : Type u -> Type u):
+  CategoryTheory.Category (Type u × Type u) where
+  Hom A B := B.2 → Proxy B.1 B.2 A.1 A.2 m r
+  id A := Proxy.Unbounded.push
+  comp f g := g >~> f --  fun a => g a >>~ f
+  id_comp := by
+    intro ⟨b', b⟩ ⟨a', a⟩ f
+    funext arg
+    simp only [Prod.fst, Prod.snd] at f arg
+    dsimp
+    induction f arg with
+    | Pure r => simp_all
+    | Request a k ih => simp_all
+    | M mx k ih => simp_all
+    | Respond xb k ih =>
+      simp_all
+      rw [pushAssumeInfinityByDefinition]
+      simp_all
+  comp_id := by
+    intro X Y f
+    funext arg
+    obtain ⟨r, argT⟩ := X
+    obtain ⟨b, b'⟩ := Y
+    simp only [Prod.fst, Prod.snd] at f arg
+    simp_all
+    rw [pushAssumeInfinityByDefinition]
+    simp only [Proxy.pushR]
+    induction f arg with
+    | Pure r => simp_all
+    | Request a k ih =>
+      simp only [Proxy.pushR.go]
+      simp_all
+      funext arg
+      rw [pushAssumeInfinityByDefinition]
+      simp_all
+    | Respond x' k ih => simp_all
+    | M mx k ih => simp_all
+  assoc := by
+    dsimp
+    intro X Y W Z f g h
+    funext arg
+    obtain ⟨Xb', Xb⟩ := X
+    obtain ⟨Ya', Ya⟩ := Y
+    obtain ⟨Wb', Wb⟩ := W
+    obtain ⟨Za', Za⟩ := Z
+    simp only [Prod.fst, Prod.snd] at g h f arg
+    induction h arg generalizing f g with
+    | Pure r => simp [Proxy.pushR]
+    | M mx k ih => simp [Proxy.pushR, ih]
+    | Request a k ih =>  simp [Proxy.pushR, ih]
+    | Respond x k ih =>
+      simp [Proxy.pushR]
+      induction g x generalizing k f with
+      | Pure r => simp [Proxy.pushR, Proxy.pushR.go]
+      | M mx k ih2 => simp [Proxy.pushR, Proxy.pushR.go, ih, ih2]
+      | Request a2 k2 ih2 => simp [Proxy.pushR, Proxy.pushR.go, ih]
+      | Respond x2 k2 ih2 =>
+        simp [Proxy.pushR, Proxy.pushR.go]
+        induction f x2 generalizing k k2 with
+        | Pure r => simp [Proxy.pushR.go]
+        | M mx k ih3 => simp_all [Proxy.pushR.go]
+        | Respond x3 k3 ih3 => simp_all [Proxy.pushR.go]
+        | Request a3 k3 ih3 => simp_all [Proxy.pushR.go]
 
--- lemma Fueled.pushR_push_simplify (fuel : ℕ) (default : r) (x : a) :
---   Proxy.Fueled.push (a' := a') (m := m) default fuel x >>~ Proxy.Fueled.push default fuel =
---   Proxy.Fueled.push default fuel x := by
---   induction fuel with
---   | zero =>
---     simp [Proxy.Fueled.push]
---   | succ fuel' ih =>
---     simp [Proxy.Fueled.push, Proxy.pushR, ih]
---     funext xa'
---     congr 1
---     sorry
-
-    --   -- rcases Nat.exists_eq_succ_of_ne_zero fueledPushFuelIsPositive with ⟨fueledPushFuel', rfl⟩
-
--- unsafe def Proxy.Unbounded.push {a a' r m} [Inhabited r] : a -> Proxy a' a a' a m r :=
---   (.Respond · (.Request · Proxy.Unbounded.push))
-
-axiom Hpull {r a m} (n : ℕ) (d : r) (xa' : a') :
+private axiom Hpull {r a m} (n : ℕ) (d : r) (xa' : a') :
     Proxy.Fueled.pull (a := a) (m := m) d n xa' = Proxy.Fueled.pull d (n + 1) xa'
 
-axiom Hpush (n : ℕ) (d : r) :
-    Proxy.Fueled.push (a := a) (a' := a') (m := m) d (n + 1) = Proxy.Fueled.push d n
+private axiom Hpush (n : ℕ) (d : r) :
+    Proxy.Fueled.push (a := a) (a' := a') (m := m) d n = Proxy.Fueled.push d (n + 1)
 
+/-
 variable
   (r : Type u)  (m : Type u → Type u)
   (default : r) (fuel : Nat) (fuelNE0 : fuel + 1 ≠ 0)
@@ -242,17 +286,16 @@ instance Fueled.PushCategory :
     | Request a k ih => simp_all
     | M mx k ih => simp_all
     | Respond xb k ih =>
-      rw [← Hpush]
+      rw [Hpush]
       induction h : fuel + 1 with
       | zero => contradiction
       | succ fuel' ih2 =>
         -- generalize h :  Proxy.Fueled.push default fuel' = xxx
         rw [Hpush]
-        exact ih2
+        sorry -- exact ih2
   comp_id := sorry
   assoc := sorry
-
-#print Proxy.pushR.eq_def
+-/
 
 end PushCategory
 
