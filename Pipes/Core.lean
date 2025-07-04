@@ -166,6 +166,7 @@ mutual
                  Proxy a' a c' c m r :=
     match p with
     | .Request a' fa => .Request a' (fun a => pullR.go requestfb (fa a))
+    -- | .Respond b fb' => pullR (requestfb b) fb'
     | .Respond b fb' => pullR fb' (requestfb b)
     | .M t f => .M t (fun x => pullR.go requestfb (f x))
     | .Pure r => .Pure r
@@ -173,11 +174,15 @@ mutual
   decreasing_by all_goals constructor
 
   def pullR
+    -- (p0 :       Proxy b' b c' c m r)
+    -- (fb' : b' → Proxy a' a b' b m r) :
     (fb' : b' → Proxy a' a b' b m r)
     (p0 :       Proxy b' b c' c m r) :
                 Proxy a' a c' c m r :=
     match p0 with
     | .Request xb' fb => pullR.go fb (fb' xb')
+    -- | .Respond c fc' => .Respond c (fun c' => pullR (fc' c') fb')
+    -- | .M t f => .M t (fun x => pullR (f x) fb')
     | .Respond c fc' => .Respond c (fun c' => pullR fb' (fc' c'))
     | .M t f => .M t (fun x => pullR fb' (f x))
     | .Pure r => .Pure r
@@ -185,6 +190,7 @@ mutual
     decreasing_by all_goals constructor
 end
 
+-- infixl:60 " +>> " => fun f p => pullR p f
 infixl:60 " +>> " => pullR
 
 infixl:60 " >+> " => fun f g a => f +>> g a

@@ -1,5 +1,4 @@
 import Aesop
--- import Mathlib.CategoryTheory.Category.Basic
 import Pipes.Internal
 import Canonical
 import Mathlib.Data.Nat.Init
@@ -44,13 +43,13 @@ instance : WellFoundedRelation (PullPushWF a' a b' b c' c m r) where
 
     have H2 (fb' : b' → Proxy a' a b' b m r) (q : Proxy b' b c' c m r) :
         Acc PullPushWFRel (.pushL_reg fb' q) := by
-      induction q with
+      induction q generalizing fb' H1 with
       | Request xb' xfb xih =>
-        exact ⟨_, fun | _, .pushL_request => H1 xfb (fb' xb') (fun x1 x2 => sorry)⟩
+        exact ⟨_, fun | _, .pushL_request => H1 xfb (fb' xb') H2⟩
       | Respond c fc' ih =>
-        exact ⟨_, fun | _, .pushL_respond => ih _⟩
+        exact ⟨_, fun | _, .pushL_respond => by simp_all only [implies_true, forall_const]⟩
       | M m cont ih =>
-        exact ⟨_, fun | _, .pushL_m => ih _⟩
+        exact ⟨_, fun | _, .pushL_m => by simp_all [ih]⟩
       | Pure r =>
         exact ⟨_, nofun⟩
 
@@ -60,7 +59,7 @@ instance : WellFoundedRelation (PullPushWF a' a b' b c' c m r) where
 
 -- Now define the functions with proper termination
 mutual
-def pullR [Inhabited r] (p : Proxy a' a b' b m r) (fb : b → Proxy b' b c' c m r) : Proxy a' a c' c m r :=
+def pullR (p : Proxy a' a b' b m r) (fb : b → Proxy b' b c' c m r) : Proxy a' a c' c m r :=
   match p with
   | Request a' fa  => Request a' (fun a => pullR (fa a) fb)
   | Respond b  fb' => pushL fb' (fb b)
@@ -69,7 +68,7 @@ def pullR [Inhabited r] (p : Proxy a' a b' b m r) (fb : b → Proxy b' b c' c m 
   termination_by PullPushWF.pullR_go fb p
   decreasing_by all_goals constructor
 
-def pushL [Inhabited r] (fb' : b' → Proxy a' a b' b m r) (p : Proxy b' b c' c m r) : Proxy a' a c' c m r :=
+def pushL (fb' : b' → Proxy a' a b' b m r) (p : Proxy b' b c' c m r) : Proxy a' a c' c m r :=
   match p with
   | Request b' fb  => pullR (fb' b') fb
   | Respond c  fc' => Respond c (fun c' => pushL fb' (fc' c'))
