@@ -13,24 +13,24 @@ namespace PipesLawsCore
 section RespondCategory
 
 -- Respond distributivity theorem
-theorem respondDistrib [Monad m]
+theorem respondDistrib
   (f : a → Proxy x' x b' b m a')
   (g : a' → Proxy x' x b' b m r)
   (h : b → Proxy x' x c' c m b') :
   (f >=> g) />/ h = (f />/ h) >=> (g />/ h) := by
   funext a
-  simp_all [(· >=> ·), Bind.bind]
+  simp_all [(· >=> ·), Bind.bind, Proxy.bind]
   induction f a with
   | Pure a' => rfl
   | Respond b k ih =>
-    simp_all
+    simp_all [Proxy.bind, Proxy.forP]
     induction h b with
     | Pure a' => rfl
-    | Respond b k ih => simp_all
-    | Request x' k ih => simp_all
-    | M mx ih => simp_all
-  | Request x' k ih => simp_all
-  | M mx ih => simp_all
+    | Respond b k ih => simp_all [Proxy.bind]
+    | Request x' k ih => simp_all [Proxy.bind]
+    | M mx ih => simp_all [Proxy.bind]
+  | Request x' k ih => simp_all [Proxy.bind]
+  | M mx ih => simp_all [Proxy.bind]
 
 instance RespondCategory {a' a : Type u} {m : Type u -> Type u} :
   CategoryTheory.Category (Type u × Type u) where
@@ -45,9 +45,9 @@ instance RespondCategory {a' a : Type u} {m : Type u -> Type u} :
     simp_all
     induction f arg with
     | Pure a' => rfl
-    | Respond b k ih => simp_all
-    | Request x' k ih => simp_all
-    | M mx ih => simp_all
+    | Respond b k ih => simp_all [Proxy.bind]
+    | Request x' k ih => simp_all [Proxy.bind]
+    | M mx ih => simp_all [Proxy.bind]
   comp_id := by
     intro X Y f
     funext arg
@@ -56,7 +56,7 @@ instance RespondCategory {a' a : Type u} {m : Type u -> Type u} :
     simp_all
     induction f arg with
     | Pure a' => rfl
-    | Respond b k ih => simp_all
+    | Respond b k ih => simp_all [Proxy.bind]
     | Request x' k ih => simp_all
     | M mx ih => simp_all
   assoc := by
@@ -72,17 +72,17 @@ instance RespondCategory {a' a : Type u} {m : Type u -> Type u} :
     | Respond b k ih =>
       simp_all
       induction g b with
-      | Pure a'2 => simp_all
+      | Pure a'2 => simp_all [Proxy.bind]
       | Respond b2 k2 ih2 =>
         simp_all
         induction h b2 with
-        | Pure a'2 => simp_all
-        | Respond b2 k2 ih2 => simp_all
-        | Request x' k ih => simp_all
-        | M mx ih => simp_all
-      | Request x' k ih => simp_all
-      | M mx ih => simp_all
-    | Request x' k ih => simp_all
+        | Pure a'2 => simp_all [Functor.map, Bind.bind, Proxy.bind, Proxy.forP]
+        | Respond b2 k2 ih2 => simp_all [Proxy.bind]
+        | Request x' k ih => simp_all [Proxy.bind]
+        | M mx ih => simp_all [Proxy.bind]
+      | Request x' k ih => simp_all [Proxy.bind]
+      | M mx ih => simp_all [Proxy.bind]
+    | Request x' k ih => simp_all [Proxy.bind]
     | M mx ih => simp_all
 
 

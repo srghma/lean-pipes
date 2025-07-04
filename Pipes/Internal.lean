@@ -95,7 +95,7 @@ def foldProxy
 -- This is equivalent to [foldProxy Request Respond (fun _ => M)], but using
 -- that definition makes some proofs harder.
 -- NOTE: in coq diff order of args
-@[inline] def bind
+@[inline, simp] def bind
   (p0 : Proxy a' a b' b m c)
   (f : c → Proxy a' a b' b m d) :
   Proxy a' a b' b m d :=
