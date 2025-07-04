@@ -1,4 +1,4 @@
-https://perfect-math-class.leni.sh/lecture/conclusion/
+-- https://perfect-math-class.leni.sh/lecture/conclusion/
 
 inductive IntBase where
   | pos : Nat → IntBase

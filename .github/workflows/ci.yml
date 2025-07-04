@@ -1,0 +1,34 @@
+name: continuous integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          # lean-action does not provide lake executable on Windows for some reason
+          # - windows-latest
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Pipes
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--wfail"
+          lake-package-directory: pipes
+      - name: Build PipesCorrectness
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--wfail"
+          lake-package-directory: correctness

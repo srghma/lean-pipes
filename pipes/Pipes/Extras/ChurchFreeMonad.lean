@@ -10,9 +10,7 @@ Based on "Free Monads for Less" by Edward Kmett
 Also check Zulip "Church-encoded free monad"
 -/
 
-import Aesop
 import Init.Control.State
-import Batteries.Control.AlternativeMonad
 
 abbrev F' (f : Type u → Type u) (α : Type u) := ∀ {r : Type u}, (α → r) → (f r → r) → r
 
@@ -74,7 +72,7 @@ def F.orElse [Monad f] [Alternative f] (x : F f α) (y : (Unit -> F f α)) : F f
 -- /- @[inline] -/ instance [Monad f] [Alternative f] : HOrElse (F f a) (F f a) (F f a) := ⟨F.orElse⟩
 
 /- @[inline] -/ instance [Monad f] [Alternative f] : Alternative (F f) := ⟨F.failure, F.orElse⟩
-/- @[inline] -/ instance [Monad f] [Alternative f] : AlternativeMonad (F f) where
+-- /- @[inline] -/ instance [Monad f] [Alternative f] : AlternativeMonad (F f) where
 
 namespace AlternativeTests
 

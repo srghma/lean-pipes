@@ -1,8 +1,4 @@
-import Aesop
--- import Mathlib.CategoryTheory.Category.Basic
 import Pipes.Internal
-import Canonical
-import Mathlib.Data.Nat.Init
 
 namespace Proxy
 

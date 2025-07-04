@@ -1,26 +1,31 @@
-name = "pipes"
+name = "PipesCorrectedness"
 version = "0.1.0"
-defaultTargets = ["Pipes"]
+keywords = ["pipes", "verification"]
+defaultTargets = ["PipesCorrectedness"]
 # moreLinkArgs = [
 #   "-L./.lake/packages/LeanCopilot/.lake/build/lib",
 #   "-lctranslate2",
 # ]
 
 [[lean_lib]]
-name = "Pipes"
+name = "PipesCorrectedness"
 
-[[require]]
-name = "aesop"
-scope = "leanprover-community"
-git = "https://github.com/leanprover-community/aesop"
+# [[require]]
+# name = "aesop"
+# scope = "leanprover-community"
+# git = "https://github.com/leanprover-community/aesop"
 
-[[require]]
-name = "Canonical"
-scope = "chasenorman"
+# [[require]]
+# name = "Canonical"
+# scope = "chasenorman"
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
+
+[[require]]
+name = "Pipes"
+path = "../pipes"
 
 # [[require]]
 # name = "batteries"
@@ -36,4 +41,4 @@ scope = "leanprover-community"
 
 [[lean_exe]]
 name = "test-pipes"
-root = "Main"
+root = "PipesCorrectednessMain"

@@ -1,0 +1,8 @@
+name = "Pipes"
+version = "0.1.0"
+keywords = ["pipes"]
+defaultTargets = ["Pipes"]
+
+[[lean_lib]]
+name = "Pipes"
+buildType = "relWithDebInfo"

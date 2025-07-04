@@ -1,5 +1,7 @@
 import Pipes.Core
 
+namespace Pipes.Debug
+
 inductive ASM.{u} (a' a b' b r : Type u) where
   | ReqInput : a' -> ASM a' a b' b r
   | ReqKArg  : a -> ASM a' a b' b r
