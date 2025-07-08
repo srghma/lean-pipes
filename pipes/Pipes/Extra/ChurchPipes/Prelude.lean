@@ -1,178 +1,12 @@
-/-
-- a' is the type of values flowing upstream (input)
-- a  is the type of values flowing downstream (input)
-- b' is the type of values flowing upstream (output)
-- b  is the type of values flowing downstream (output)
-- m  is the base monad
-- r  is the return type
--/
-
--- Church-encoded Proxy type
-/- @[inline] -/ @[simp] def CProxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1) :=
-  ∀ {s : Type u},
-    (a' → (a → s) → s) →       -- Handle Request (SRequest)
-    (b → (b' → s) → s) →       -- Handle Respond (SRespond)
-    (∀ x, (x → s) → m x → s) → -- Handle M (SM)
-    (r → s) →                  -- Handle Pure (SPure)
-    s
-
--- Basic constructors
-/- @[inline] -/ @[simp] def CProxy.Pure (xr : r) : CProxy a' a b' b m r :=
-  fun _ka _kb _km kp => kp xr
-
-/- @[inline] -/ @[simp] def CProxy.Request (xa' : a') (k : a → CProxy a' a b' b m r) : CProxy a' a b' b m r :=
-  fun ka kb km kp => ka xa' (fun a => k a ka kb km kp)
-
-/- @[inline] -/ @[simp] def CProxy.Respond (xb : b) (k : b' → CProxy a' a b' b m r) : CProxy a' a b' b m r :=
-  fun ka kb km kp => kb xb (fun b' => k b' ka kb km kp)
-
-/- @[inline] -/ @[simp] def CProxy.M (mx : m r) : CProxy a' a b' b m r :=
-  fun _ka _kb km kp => km r kp mx
-
--- Fold function (trivial for Church encoding)
-/- @[inline] -/ @[simp] def foldProxy
-  (ka : a' → (a → s) → s)
-  (kb : b → (b' → s) → s)
-  (km : (x : Type u) → (x → s) → m x → s)
-  (kp : r → s)
-  (p : CProxy a' a b' b m r) : s :=
-  p ka kb km kp
-
--- Bind operation
-/- @[inline] -/ @[simp] def CProxy.bind
-  (p0 : CProxy a' a b' b m c)
-  (f : c → CProxy a' a b' b m d) :
-  CProxy a' a b' b m d :=
-  fun ka kb km kp =>
-    p0 ka kb km (fun c => f c ka kb km kp)
-
-/- @[inline] -/ @[simp] def CProxy.map (f : r → s) (p : CProxy a' a b' b m r) : CProxy a' a b' b m s := CProxy.bind p (CProxy.Pure ∘ f)
-/- @[inline] -/ @[simp] def CProxy.seq (pf : CProxy a' a b' b m (r → s)) (px : PUnit → CProxy a' a b' b m r) : CProxy a' a b' b m s := CProxy.bind pf (CProxy.map · (px ()))
-/- @[inline] -/ @[simp] def CProxy.request : a' -> CProxy a' a b' b m a := (CProxy.Request · CProxy.Pure)
-/- @[inline] -/ @[simp] def CProxy.respond : b -> CProxy a' a b' b m b' := (CProxy.Respond · CProxy.Pure)
-
-/- @[inline] -/ instance : Functor (CProxy a' a b' b m) := { map := CProxy.map }
-/- @[inline] -/ instance : Pure (CProxy a' a b' b m) := ⟨CProxy.Pure⟩
-/- @[inline] -/ instance : Seq (CProxy a' a b' b m) := ⟨CProxy.seq⟩
-/- @[inline] -/ instance : Bind (CProxy a' a b' b m) := ⟨CProxy.bind⟩
-/- @[inline] -/ instance : Monad (CProxy a' a b' b m) where
-/- @[inline] -/ instance : MonadLift m (CProxy a' a b' b m) := ⟨CProxy.M⟩
-
-instance : LawfulMonad (CProxy a' a b' b m) := LawfulMonad.mk'
-  (id_map := fun x => by rfl)
-  (pure_bind := fun _ _ => by rfl)
-  (bind_assoc := fun x _ _ => by rfl)
-
-instance : LawfulApplicative (CProxy a' a b' b m) := inferInstance
-instance : LawfulFunctor (CProxy a' a b' b m) := inferInstance
-
-@[inline, simp]
-def CProxy.failure [Alternative m] : CProxy a' a b' b m r :=
-  fun _ka _kb km kp => km r kp Alternative.failure
-  -- CProxy.M Alternative.failure
-
--- From https://github.com/leanprover-community/mathlib4/blob/730e4db21155a3faee9cadd55d244dbf72f06391/Mathlib/Control/Combinators.lean#L14-L17
-@[always_inline, inline, simp] def Monad.joinM {m : Type u → Type u} [Monad m] {α : Type u} (a : m (m α)) : m α := bind a id
-
-@[inline, simp]
-def CProxy.orElse [Monad m] [Alternative m]
-  (x : CProxy a' a b' b m ret) (y : PUnit → CProxy a' a b' b m ret) : CProxy a' a b' b m ret :=
-  fun {result} _ka _kb km kp =>
-    let mx : m result := x
-      (fun _ _ => Alternative.failure)
-      (fun _ _ => Alternative.failure)
-      (fun _ f mt => mt >>= f)
-      (fun a => pure (kp a))
-    let my : PUnit -> m result := fun _ => y ()
-      (fun _ _ => Alternative.failure)
-      (fun _ _ => Alternative.failure)
-      (fun _ f mt => mt >>= f)
-      (fun a => pure (kp a))
-    km result id (Alternative.orElse mx my)
-
-/- @[inline] -/ instance [Monad m] [Alternative m] : Alternative (CProxy a' a b' b m) := ⟨CProxy.failure, CProxy.orElse⟩
--- /- @[inline] -/ instance [Monad m] [Alternative m] : AlternativeMonad (CProxy a' a b' b m) where
-
-/- @[inline] -/ instance [MonadState σ m] : MonadState σ (CProxy a' a b' b m) where
-  get := CProxy.M MonadState.get
-  set s := CProxy.M (MonadState.set s)
-  modifyGet f := CProxy.M (MonadState.modifyGet f)
-
-/- @[inline] -/ instance [MonadReader ρ m] : MonadReader ρ (CProxy a' a b' b m) where
-  read := CProxy.M MonadReader.read
-
--- instance [Monad m] [Alternative m] [LawfulAlternative m] : LawfulAlternative (CProxy a' a b' b m) where
---   map_failure g := by
---     funext ka kb km kp
---     dsimp [Functor.map, CProxy.map, CProxy.bind, CProxy.failure, CProxy.M, CProxy] at *
---     unfold CProxy.bind CProxy.Pure
---     simp only [Function.comp]
---     funext kp₁
---     dsimp [Functor.map, CProxy.map, CProxy.bind, CProxy.failure, CProxy.M, CProxy, Alternative.failure] at *
---     unfold Alternative.failure
---     sorry
---   failure_seq x := by sorry
---   map_orElse x y g := by rfl
---   orElse_failure x := by
---     funext ka kb km kp
---     dsimp [Functor.map, CProxy.map, CProxy.bind, CProxy.failure, CProxy.M, CProxy] at *
---     funext kp₁
---     dsimp [Functor.map, CProxy.map, CProxy.bind, CProxy.failure, CProxy.M, CProxy, Alternative.failure] at *
---     -- rw [LawfulAlternative.map_failure]
---     sorry
---
---   -- failure <|> y = y
---   failure_orElse y := by
---     sorry
---
---   -- (x <|> y) <|> z = x <|> (y <|> z)
---   orElse_assoc x y z := by
---     sorry
-
--- Type aliases
-abbrev CEffect      := CProxy PEmpty PUnit PUnit PEmpty
-abbrev CProducer b  := CProxy PEmpty PUnit PUnit b
-abbrev CPipe a b    := CProxy PUnit a PUnit b -- downstream input -> downstream output
-abbrev CConsumer a  := CProxy PUnit a PUnit PEmpty
-abbrev CClient a' a := CProxy a' a PUnit PEmpty
-abbrev CServer b' b := CProxy PEmpty PUnit b' b
-
-abbrev CEffect_        m r := forall {a' a b' b}, CProxy a'   a b'   b m r
-abbrev CProducer_ b    m r := forall {a' a},      CProxy a'   a PUnit b m r
-abbrev CConsumer_ a    m r := forall {b' b},      CProxy PUnit a b'   b m r
-abbrev CServer_   b' b m r := forall {a' a},      CProxy a'   a b'   b m r
-abbrev CClient_   a' a m r := forall {b' b},      CProxy a'   a b'   b m r
-
 -- Kleisli composition for CProxy
-def CProxy.kleisli_compose
+def kleisli_compose
   (f : b → CProxy a' a b' b m c)
   (g : a → CProxy a' a b' b m b) :
   a → CProxy a' a b' b m c :=
   fun a => CProxy.bind (g a) f
 
--- Run functions
-@[always_inline, inline] def CProxy.runEffect [Monad m] (eff : CEffect m r) : m r :=
-  eff
-    (fun x _ => PEmpty.elim x)              -- Handle Request (impossible)
-    (fun x _ => PEmpty.elim x)              -- Handle Respond (impossible)
-    (fun _ f mt => mt >>= f)               -- Handle M
-    pure                                   -- Handle Pure
-
--- namespace AlternativeTest
---   def testAlt1 : CProxy PEmpty PUnit PUnit PEmpty Option String := CProxy.failure
---   def testAlt2 : CProxy PEmpty PUnit PUnit PEmpty Option String := CProxy.Pure $ "world"
---
---   #guard CProxy.runEffect testAlt1 = .none
---   #guard CProxy.runEffect testAlt2 = .some "world"
---
---   #guard CProxy.runEffect (CProxy.orElse testAlt1 $ fun _ => testAlt2) = CProxy.runEffect testAlt2
---   #guard CProxy.runEffect (CProxy.orElse testAlt1 $ fun _ => CProxy.orElse testAlt1 $ fun _ => testAlt2) = CProxy.runEffect testAlt2
---   -- FIXME
---   -- #guard CProxy.runEffect (testAlt1 <|> testAlt2) = CProxy.runEffect testAlt2
--- end AlternativeTest
-
 -- Composition operations == forP
-/- @[inline] -/ def CProxy.composeProxy
+def composeProxy
   (p0 :     CProxy x' x b' b m a')
   (fb : b → CProxy x' x c' c m b') :
             CProxy x' x c' c m a' :=
@@ -182,13 +16,13 @@ def CProxy.kleisli_compose
       km
       kp
 
-/- @[inline] -/ def CProxy.composeProxyFlipped
+def composeProxyFlipped
     (fb : b → CProxy x' x c' c m b')
     (p0 :     CProxy x' x b' b m a') :
               CProxy x' x c' c m a' := CProxy.composeProxy p0 fb
 
 -- Now let's fix the connectProducerConsumer with the correct parameter order
--- partial def CProxy.connectProducerConsumer
+-- partial def connectProducerConsumer
 --   (producer : CProducer b m r)
 --   (consumer : CConsumer b m r) :
 --   Effect m r := fun {result} kaemptyHandler kbemptyHandler km kp =>
@@ -210,46 +44,46 @@ def CProxy.kleisli_compose
 -- infixl:60 " <-< " => fun consumer producer => CProxy.connectProducerConsumer producer consumer
 
 -- Additional utility functions
-def CProxy.yield : b -> CProducer b m PUnit := CProxy.respond
+def yield : b -> CProducer b m PUnit := CProxy.respond
 
-def CProxy.await : CConsumer a m a := CProxy.request ()
+def await : CConsumer a m a := CProxy.request ()
 
-partial def CProxy.cat [Inhabited r] : CPipe a a m r :=
+partial def cat [Inhabited r] : CPipe a a m r :=
   fun ka kb km kp => ka () (fun a => kb a (fun _ => cat ka kb km kp))
 
 -- CPipe composition (left-to-right)
-def CProxy.pipeCompose
+def pipeCompose
   (p1 : CProxy a' a b' b m r)
   (p2 : CProxy b' b c' c m r) :
   CProxy a' a c' c m r :=
   fun ka kb km kp =>
     p1 ka (fun _b k => p2 (fun b' _f => k b') kb km kp) km kp
 
-def CProxy.forM [Monad m] (xs : List a) (f : a → CProxy x' x b' b m PUnit) : CProxy x' x b' b m PUnit :=
+def forM [Monad m] (xs : List a) (f : a → CProxy x' x b' b m PUnit) : CProxy x' x b' b m PUnit :=
   List.foldl (fun acc x kreq kresp km kpure =>
     acc kreq kresp km (fun _ => f x kreq kresp km kpure)) (CProxy.Pure ()) xs
 
 -------------------- ADDITIONAL FUNCTIONS FROM COQ VERSION
 
-def CProxy.mapUpstreamInput
+def mapUpstreamInput
   (f : a' → A') (p : CProxy a' a b' b m r) : CProxy A' a b' b m r :=
   fun ka' kb' kp kr => p (fun xa' xka => ka' (f xa') xka) kb' kp kr
 
-def CProxy.mapDownstreamInput
+def mapDownstreamInput
   (f : A → a) (p : CProxy a' a b' b m r) : CProxy a' A b' b m r :=
   fun ka' kb' kp kr => p (fun xa' xka => ka' xa' (xka ∘ f)) kb' kp kr
 
-def CProxy.mapUpstreamOutput
+def mapUpstreamOutput
   (f : B' → b') (p : CProxy a' a b' b m r) : CProxy a' a B' b m r :=
   fun ka' kb' kp kr => p ka' (fun xb xkb' => kb' xb (xkb' ∘ f)) kp kr
 
-def CProxy.mapDownstreamOutput
+def mapDownstreamOutput
   (f : b → B) (p : CProxy a' a b' b m r) : CProxy a' a b' B m r :=
   fun ka' kb' kp kr => p ka' (fun xb xkb' => kb' (f xb) xkb') kp kr
 
 -----------------
 
-private partial def CProxy.mapUpstreamInputWithIndexGo [Inhabited r]
+private partial def mapUpstreamInputWithIndexGo [Inhabited r]
   (f : Nat -> a' → A') (p : CProxy a' a b' b m r) (acc : Nat) : CProxy A' a b' b m r :=
   fun ka kb km kr =>
     p
@@ -258,51 +92,51 @@ private partial def CProxy.mapUpstreamInputWithIndexGo [Inhabited r]
       km
       kr
 
-def CProxy.mapUpstreamInputWithIndex [Inhabited r]
+def mapUpstreamInputWithIndex [Inhabited r]
   (f : Nat -> a' → A') (p : CProxy a' a b' b m r) : CProxy A' a b' b m r :=
   CProxy.mapUpstreamInputWithIndexGo f p 0
 
-def CProxy.enumerateUpstreamInput [Inhabited r]
+def enumerateUpstreamInput [Inhabited r]
   (p : CProxy a' a b' b m r) : CProxy (Nat × a') a b' b m r :=
   CProxy.mapUpstreamInputWithIndex (fun acc a' => (acc, a')) p
 
 -----------------
 
 -- Filter pipe
-partial def CProxy.filter [Inhabited r] (p : a -> Bool) : CPipe a a m r :=
+partial def filter [Inhabited r] (p : a -> Bool) : CPipe a a m r :=
   fun ka kb km kp =>
     ka () (fun a =>
       if p a then kb a (fun _ => filter p ka kb km kp)
       else filter p ka kb km kp)
 
 -- Take n elements
-def CProxy.take (n : Nat) : CPipe a a m PUnit :=
+def take (n : Nat) : CPipe a a m PUnit :=
   fun ka kb km kp =>
     if n = 0 then kp ()
     else ka () (fun a => kb a (fun _ => take (n-1) ka kb km kp))
 
 -- Drop n elements
-def CProxy.drop (n : Nat) : CPipe a a m PUnit :=
+def drop (n : Nat) : CPipe a a m PUnit :=
   fun ka kb km kp =>
     if n = 0 then cat ka kb km kp
     else ka () (fun _ => drop (n-1) ka kb km kp)
 
 -- Take while predicate holds
-partial def CProxy.takeWhile (p : a -> Bool) : CPipe a a m PUnit :=
+partial def takeWhile (p : a -> Bool) : CPipe a a m PUnit :=
   fun ka kb km kp =>
     ka () (fun a =>
       if p a then kb a (fun _ => takeWhile p ka kb km kp)
       else kp ())
 
 -- Drop while predicate holds
-partial def CProxy.dropWhile (p : a -> Bool) : CPipe a a m PUnit :=
+partial def dropWhile (p : a -> Bool) : CPipe a a m PUnit :=
   fun ka kb km kp =>
     ka () (fun a =>
       if p a then dropWhile p ka kb km kp
       else kb a (fun _ => cat ka kb km kp))
 
 -- Scan (like fold but emits intermediate results)
-partial def CProxy.scan [Inhabited r]
+partial def scan [Inhabited r]
   (f : s → a → s) (init : s) : CPipe a s m r :=
   fun ka kb km kp =>
     ka () (fun a =>
@@ -311,32 +145,32 @@ partial def CProxy.scan [Inhabited r]
     )
 
 -- Fold over all inputs
-private partial def CProxy.fold (f : s → a → s) (acc : s) : CConsumer a m s := CProxy.Request () fun a => CProxy.fold f (f acc a)
+private partial def fold (f : s → a → s) (acc : s) : CConsumer a m s := CProxy.Request () fun a => CProxy.fold f (f acc a)
 
 -- Convert list to producer
-def CProxy.fromList : List b → CProducer b m PUnit
+def fromList : List b → CProducer b m PUnit
 | []      => CProxy.Pure ()
 | (x::xs) => CProxy.Respond x (fun _ => fromList xs)
 
 -- Convert array to producer
-def CProxy.fromArray : Array b -> CProducer b m PUnit :=
+def fromArray : Array b -> CProducer b m PUnit :=
   fromList ∘ Array.toList
 
 -- Collect all values into a list
-private partial def CProxy.toListGo [Inhabited a]
+private partial def toListGo [Inhabited a]
   (acc : List a) : CConsumer a m (List a) :=
   CProxy.Request () fun a => CProxy.toListGo (a :: acc)
 
-partial def CProxy.toList [Inhabited a] : CConsumer a m (List a) := CProxy.toListGo []
+partial def toList [Inhabited a] : CConsumer a m (List a) := CProxy.toListGo []
 
 -- Enumerate with indices
-partial def CProxy.enumerateGo [Inhabited r]
+partial def enumerateGo [Inhabited r]
   (i : Nat) : CPipe a (Nat × a) m r := CProxy.Request () fun a => CProxy.Respond (i, a) fun _ => CProxy.enumerateGo (i + 1)
 
-partial def CProxy.enumerate  [Inhabited r] : CPipe a (Nat × a) m r := CProxy.enumerateGo 0
+partial def enumerate  [Inhabited r] : CPipe a (Nat × a) m r := CProxy.enumerateGo 0
 
 -- Zip two pipes together
--- def CProxy.zip {a b r1 r2 m}
+-- def zip {a b r1 r2 m}
 --   (p1 : CProducer b m r1) (p2 : CProducer b m r2) : CProducer (a × b) m (Sum r1 r2) :=
 --   fun ka kb kp kr =>
 --     p1
@@ -351,18 +185,18 @@ partial def CProxy.enumerate  [Inhabited r] : CPipe a (Nat × a) m r := CProxy.e
 --       (fun r1 => kr (Sum.inl r1))
 
 -- Interleave two producers
--- def CProxy.interleave (p1 : CProducer b m r) (p2 : CProducer b m r) : CProducer b m r :=
+-- def interleave (p1 : CProducer b m r) (p2 : CProducer b m r) : CProducer b m r :=
 --   fun ka kb km kp =>
 --     -- Alternate between p1 and p2
 --     sorry
 
 -- Duplicate a stream
-partial def CProxy.tee [Inhabited r] : CPipe a (a × a) m r :=
+partial def tee [Inhabited r] : CPipe a (a × a) m r :=
   fun ka kb km kp =>
     ka () (fun a => kb (a, a) (fun _ => tee ka kb km kp))
 
 -- Buffer n elements
--- partial def CProxy.buffer [Inhabited r] [Inhabited a] (n : Nat) : CPipe a (List a) m r :=
+-- partial def buffer [Inhabited r] [Inhabited a] (n : Nat) : CPipe a (List a) m r :=
 --   fun ka kb km kp =>
 --     let rec go acc count :=
 --       if count >= n then
@@ -372,7 +206,7 @@ partial def CProxy.tee [Inhabited r] : CPipe a (a × a) m r :=
 --     go [] 0
 
 -- Group consecutive equal elements
--- partial def CProxy.group [Inhabited r] [Inhabited a] [BEq a] : CPipe a (List a) m r :=
+-- partial def group [Inhabited r] [Inhabited a] [BEq a] : CPipe a (List a) m r :=
 --   fun ka kb km kp =>
 --     ka () (fun first =>
 --       let rec collect current acc :=
@@ -384,7 +218,7 @@ partial def CProxy.tee [Inhabited r] : CPipe a (a × a) m r :=
 --      collect first [first])
 
 -- Distinct/unique elements only
--- partial def CProxy.distinct [BEq a] [Inhabited r] [Inhabited a] : CPipe a a m r :=
+-- partial def distinct [BEq a] [Inhabited r] [Inhabited a] : CPipe a a m r :=
 --   fun ka kb km kp =>
 --     let rec go seen :=
 --       ka () (fun a =>
@@ -395,24 +229,24 @@ partial def CProxy.tee [Inhabited r] : CPipe a (a × a) m r :=
 --     go []
 
 -- Chain multiple pipes together
--- def CProxy.chain (pipes : List (Pipe a a m PUnit)) : CPipe a a m PUnit :=
+-- def chain (pipes : List (Pipe a a m PUnit)) : CPipe a a m PUnit :=
 --   pipes.foldl (fun acc pipe =>
 --     -- Compose pipes: acc >-> pipe
 --     sorry) cat
 
 -- Repeat a producer infinitely
--- partial def CProxy.repeatP [Inhabited r] [Inhabited a] (p : CProducer b m PUnit) : CProducer b m r :=
+-- partial def repeatP [Inhabited r] [Inhabited a] (p : CProducer b m PUnit) : CProducer b m r :=
 --   fun ka kb km kp =>
 --     let rec go :=
 --       p ka kb km (fun _ => go)
 --     go
 
 -- Replicate an element n times
-def CProxy.replicate (n : Nat) (x : b) : CProducer b m PUnit :=
+def replicate (n : Nat) (x : b) : CProducer b m PUnit :=
   fromList (List.replicate n x)
 
 -- Cycle through a list infinitely
--- partial def CProxy.cycle [Inhabited r] [Inhabited a] : List a → CProducer b m r
+-- partial def cycle [Inhabited r] [Inhabited a] : List a → CProducer b m r
 -- | [] => CProxy.Pure (by simp) -- empty list case
 -- | xs =>
 --   fun ka kb km kp =>
@@ -420,35 +254,35 @@ def CProxy.replicate (n : Nat) (x : b) : CProducer b m PUnit :=
 --     go
 
 -- Prepend an element to a producer
-def CProxy.cons (x : b) (p : CProducer b m r) : CProducer b m r :=
+def cons (x : b) (p : CProducer b m r) : CProducer b m r :=
   fun ka kb km kp =>
     kb x (fun _ => p ka kb km kp)
 
 -- Append an element to a producer
-def CProxy.snoc  (p : CProducer b m PUnit) (x : b) : CProducer b m PUnit :=
+def snoc  (p : CProducer b m PUnit) (x : b) : CProducer b m PUnit :=
   fun ka kb km kp =>
     p ka kb km (fun _ => kb x (fun _ => kp ()))
 
 -- Utilities for working with monadic actions
-partial def CProxy.mapM [Inhabited r] (f : a -> m b) : CPipe a b m r :=
+partial def mapM [Inhabited r] (f : a -> m b) : CPipe a b m r :=
   fun ka kb km kp =>
     ka () (fun a =>
       km b (fun b => kb b (fun _ => CProxy.mapM f ka kb km kp)) (f a))
 
-partial def CProxy.mapM_ [Inhabited a] (f : a -> m PUnit) : CConsumer a m PUnit :=
+partial def mapM_ [Inhabited a] (f : a -> m PUnit) : CConsumer a m PUnit :=
   fun ka kb km kp =>
     ka () (fun a =>
       km PUnit (fun _ => CProxy.mapM_ f ka kb km kp) (f a))
 
 -- Print each element (for debugging)
-partial def CProxy.print [ToString a] [MonadLift IO m] [Inhabited r] : CPipe a a m r :=
+partial def print [ToString a] [MonadLift IO m] [Inhabited r] : CPipe a a m r :=
   fun ka kb km kp =>
     ka () (fun a =>
       km PUnit (fun _ => kb a (fun _ => print ka kb km kp))
              (MonadLift.monadLift (IO.println (toString a))))
 
 -- Composition operations (corresponding to Coq operators)
-/- @[inline] -/ def CProxy.composeForward
+def composeForward
   (p0 :     CProxy x' x b' b m a')
   (fb : b → CProxy x' x c' c m b') :
             CProxy x' x c' c m a' :=
@@ -458,7 +292,7 @@ partial def CProxy.print [ToString a] [MonadLift IO m] [Inhabited r] : CPipe a a
       km
       kp
 
-/- @[inline] -/ def CProxy.composeBackward
+def composeBackward
     (fb : b → CProxy x' x c' c m b')
     (p0 :     CProxy x' x b' b m a') :
               CProxy x' x c' c m a' := CProxy.composeForward p0 fb
@@ -467,7 +301,7 @@ partial def CProxy.print [ToString a] [MonadLift IO m] [Inhabited r] : CPipe a a
 -- infixl:60 " //> " => CProxy.composeForward
 -- infixl:60 " <\\\\ " => CProxy.composeBackward
 
-/- @[inline] -/ def CProxy.pipeOp
+def pipeOp
   {x' x b' b c' c a' α : Type}
   (f : α → CProxy x' x b' b m a')
   (g : b → CProxy x' x c' c m b')
@@ -475,31 +309,10 @@ partial def CProxy.print [ToString a] [MonadLift IO m] [Inhabited r] : CPipe a a
 
 -- infixl:60 " />/ " => CProxy.pipeOp
 
--- Forward composition (forP in Coq)
-/- @[inline] -/ def CProxy.forP
-  (p0 : CProxy x' x b' b m a')
-  (fb : b → CProxy x' x c' c m b') :
-  CProxy x' x c' c m a' :=
-  fun ka kb km kp =>
-    p0 ka
-      (fun b k => fb b ka kb km (fun b' => k b'))
-      km
-      kp
-
 -- Backward composition (rofP in Coq)
-/- @[inline] -/ def CProxy.rofP
-  (fb' : b' → CProxy a' a y' y m b)
-  (p0 : CProxy b' b y' y m c) :
-  CProxy a' a y' y m c :=
-  fun ka kb km kp =>
-    p0
-      (fun b' k => fb' b' ka kb km (fun b => k b))
-      kb
-      km
-      kp
 
 -- Push category - corresponds to pushR in Coq
-/- @[inline] -/ def CProxy.pushR
+def pushR
   (p0 : CProxy a' a b' b m r)
   (fb : b → CProxy b' b c' c m r) :
   CProxy a' a c' c m r :=
@@ -516,7 +329,7 @@ partial def CProxy.print [ToString a] [MonadLift IO m] [Inhabited r] : CPipe a a
       kp
 
 -- Pull category - corresponds to pullR in Coq
-/- @[inline] -/ def CProxy.pullR
+def pullR
   (fb' : b' → CProxy a' a b' b m r)
   (p0 : CProxy b' b c' c m r) :
   CProxy a' a c' c m r :=
@@ -533,22 +346,22 @@ infixl:60 " >>~ " => CProxy.pushR
 infixl:60 " +>> " => CProxy.pullR
 
 -- Function composition versions
-def CProxy.forPFunc
+def forPFunc
   (f : a' → CProxy x' x b' b m a')
   (g : b → CProxy x' x c' c m b') :
   a' → CProxy x' x c' c m a' := fun a => f a //> g
 
-def CProxy.rofPFunc
+def rofPFunc
   (f : b' → CProxy a' a y' y m b)
   (g : c → CProxy b' b y' y m c) :
   c → CProxy a' a y' y m c := fun c => f >\\ g c
 
-def CProxy.pushRFunc
+def pushRFunc
   (f : a' → CProxy a' a b' b m r)
   (g : b → CProxy b' b c' c m r) :
   a' → CProxy a' a c' c m r := fun a => f a >>~ g
 
-def CProxy.pullRFunc
+def pullRFunc
   (f : b' → CProxy a' a b' b m r)
   (g : c' → CProxy b' b c' c m r) :
   c' → CProxy a' a c' c m r := fun c => f +>> g c
@@ -571,7 +384,7 @@ infixl:60 " <~< " => fun g f => f >~> g
 infixl:60 " <+< " => fun g f => f >+> g
 
 -- Reflect operation (dual)
-def CProxy.reflect [Monad m] (p : CProxy a' a b' b m r) : CProxy b b' a a' m r :=
+def reflect [Monad m] (p : CProxy a' a b' b m r) : CProxy b b' a a' m r :=
   fun {x}
     (bHandler : b → (b' → x) → x)
     (aHandler : a' → (a → x) → x)
