@@ -51,66 +51,60 @@ def Fueled.push {a a' m r} (default : r) : Nat -> a → CProxy a' a a' a m r
 partial def Unbounded.push {a a' r m} [Inhabited r] : a -> CProxy a' a a' a m r :=
   (Respond · (Request · Unbounded.push))
 
--- inductive CProxyPushRWF (a' a b' b c' c m r) where
---   | go : (b' → CProxy a' a b' b m r) → CProxy b' b c' c m r → CProxyPushRWF a' a b' b c' c m r
---   | reg : CProxy a' a b' b m r → CProxyPushRWF a' a b' b c' c m r
---
--- inductive CProxyPushRWFRel :
---     CProxyPushRWF a' a b' b c' c m r → CProxyPushRWF a' a b' b c' c m r → Prop where
---   | go_request : CProxyPushRWFRel (.reg (k xb')) (.go k (.Request xb' _kb))
---   | go_respond : CProxyPushRWFRel (.go k (kc' yc)) (.go k (.Respond xc kc'))
---   | go_m : CProxyPushRWFRel (.go k (kx x)) (.go k (.M mx kx))
---   | request : CProxyPushRWFRel (.reg (k a)) (.reg (.Request xa' k))
---   | m : CProxyPushRWFRel (.reg (k x)) (.reg (.M mx k))
---   | respond : CProxyPushRWFRel (.go k t) (.reg (.Respond xb k))
---
--- instance : WellFoundedRelation (CProxyPushRWF a' a b' b c' c m r) where
---   rel := CProxyPushRWFRel
---   wf := by
---     refine ⟨fun p => ?_⟩
---     have H1 (x k) (hk : ∀ y, Acc CProxyPushRWFRel (.reg (k y) : CProxyPushRWF a' a b' b c' c m r)) :
---         Acc CProxyPushRWFRel (.go k x : CProxyPushRWF a' a b' b c' c m r) := by
---       induction x with
---       | Request => exact ⟨_, fun | _, .go_request => hk _⟩
---       | Respond _ _ ih => exact ⟨_, fun | _, .go_respond => ih _⟩
---       | M _ _ ih => exact ⟨_, fun | _, .go_m => ih _⟩
---       | Pure => exact ⟨_, nofun⟩
---     have H2 (x) : Acc CProxyPushRWFRel (.reg x : CProxyPushRWF a' a b' b c' c m r) := by
---       induction x with
---       | Request _ _ ih => exact ⟨_, fun | _, .request => ih _⟩
---       | Respond _ _ ih => exact ⟨_, fun | _, .respond => H1 _ _ ih⟩
---       | M _ _ ih => exact ⟨_, fun | _, .m => ih _⟩
---       | Pure => exact ⟨_, nofun⟩
---     cases p with
---     | reg => exact H2 _
---     | go => exact H1 _ _ (fun _ => H2 _)
+-- mutual
+--   def pushR.go
+--     (fb' : b' → CProxy a' a b' b m r)
+--     (p : CProxy b' b c' c m r)
+--     : CProxy a' a c' c m r :=
+--     fun {s} ka kb km kp =>
+--       p
+--         -- Handle Request from p: b' → (b → s) → s
+--         (fun xb' k_b_to_s =>
+--           -- We need to call pushR on (fb' xb') with the continuation k_b_to_s
+--           -- But k_b_to_s expects a b, so we need to adapt it
+--           pushR (fb' xb') (fun b =>
+--             -- Convert the b to the expected CProxy b' b c' c m r
+--             fun ka' kb' km' kp' => k_b_to_s b) ka kb km kp)
 
-mutual
-  def pushR.go
-    (fb' : b' → CProxy a' a b' b m r)
-    (p : CProxy b' b c' c m r)
-    : CProxy a' a c' c m r :=
-    fun ka kb km kp =>
-    match p with
-    | .Request xb' fb => pushR (fb' xb') fb
-    | .Respond xc fc' => .Respond xc (fun c' => pushR.go fb' (fc' c'))
-    | .M mx kx => .M mx (fun x => pushR.go fb' (kx x))
-    | .Pure xr => .Pure xr
-    termination_by CProxyPushRWF.go fb' p
-    decreasing_by all_goals constructor
+--         -- Handle Respond from p: c → (c' → s) → s
+--         (fun xc k_c'_to_s =>
+--           -- Respond with xc, and for continuation, apply pushR.go recursively
+--           kb xc (fun c' =>
+--             pushR.go fb' (fun ka' kb' km' kp' => k_c'_to_s c') ka kb km kp))
 
-  def pushR
-    (p0 : CProxy a' a b' b m r)
-    (fb : b → CProxy b' b c' c m r) :
-    CProxy a' a c' c m r :=
-    match p0 with
-    | .Request xa' k => .Request xa' (fun a => pushR (k a) fb)
-    | .Respond xb fb' => pushR.go fb' (fb xb)
-    | .M t f => .M t (fun x => pushR (f x) fb)
-    | .Pure xr => .Pure xr
-    termination_by (.reg p0 : CProxyPushRWF a' a b' b c' c m r)
-    decreasing_by all_goals constructor
-end
+--         -- Handle M from p: ∀ x, (x → s) → m x → s
+--         (fun x k_x_to_s mx =>
+--           km x (fun x_val =>
+--             pushR.go fb' (fun ka' kb' km' kp' => k_x_to_s x_val) ka kb km kp) mx)
+
+--         -- Handle Pure from p: r → s
+--         (fun xr => kp xr)
+
+--   def pushR
+--     (p0 : CProxy a' a b' b m r)
+--     (fb : b → CProxy b' b c' c m r) :
+--     CProxy a' a c' c m r :=
+--     fun {s} ka kb km kp =>
+--       p0
+--         -- Handle Request from p0: a' → (a → s) → s
+--         (fun xa' k_a_to_s =>
+--           ka xa' (fun a =>
+--             pushR (fun {s2} ka' kb' km' kp' => k_a_to_s a) fb ka kb km kp))
+
+--         -- Handle Respond from p0: b → (b' → s) → s
+--         (fun xb k_b'_to_s =>
+--           -- This is where we connect to fb
+--           pushR.go (fun b' =>
+--             fun ka' kb' km' kp' => k_b'_to_s b') (fb xb) ka kb km kp)
+
+--         -- Handle M from p0: ∀ x, (x → s) → m x → s
+--         (fun x k_x_to_s mx =>
+--           km x (fun x_val =>
+--             pushR (fun ka' kb' km' kp' => k_x_to_s x_val) fb ka kb km kp) mx)
+
+--         -- Handle Pure from p0: r → s
+--         (fun xr => kp xr)
+-- end
 
 end CProxy
 

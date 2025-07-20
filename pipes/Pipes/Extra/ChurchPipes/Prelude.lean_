@@ -1,0 +1,808 @@
+-- -- Kleisli composition for CProxy
+-- -- Now let's fix the connectProducerConsumer with the correct parameter order
+-- -- partial def connectProducerConsumer
+-- --   (producer : CProducer b m r)
+-- --   (consumer : CConsumer b m r) :
+-- --   Effect m r := fun {result} kaemptyHandler kbemptyHandler km kp =>
+-- --     producer
+-- --       PEmpty.elim
+-- --       (fun xb cont_prod =>                  -- CProducer yields xb
+-- --         consumer
+-- --           (fun _ cont_cons =>               -- CConsumer requests
+-- --             let new_producer : CProducer b m r := fun newkreqE newkresp newkm newkpure => ?a
+-- --             let new_consumer : CConsumer b m r := fun newkreq newkrespE newkm newkpure => ?b
+-- --             CProxy.connectProducerConsumer new_producer new_consumer PEmpty.elim PEmpty.elim km kp)
+-- --           PEmpty.elim
+-- --           km                                -- CConsumer M
+-- --           kp)                               -- CConsumer Pure
+-- --       km                                    -- CProducer M
+-- --       kp                                    -- CProducer Pure
+-- --
+-- -- infixl:60 " >-> " => CProxy.connectProducerConsumer
+-- -- infixl:60 " <-< " => fun consumer producer => CProxy.connectProducerConsumer producer consumer
+
+-- Additional utility functions
+-- def yield : b -> CProducer b m PUnit := CProxy.Respond
+
+-- def await : CConsumer a m a := CProxy.Request ()
+
+-- partial def cat [Inhabited r] : CPipe a a m r :=
+--   fun ka kb km kp => ka () (fun a => kb a (fun _ => cat ka kb km kp))
+
+-- -- CPipe composition (left-to-right)
+-- def pipeCompose
+--   (p1 : CProxy a' a b' b m r)
+--   (p2 : CProxy b' b c' c m r) :
+--   CProxy a' a c' c m r :=
+--   fun ka kb km kp =>
+--     p1 ka (fun _b k => p2 (fun b' _f => k b') kb km kp) km kp
+
+-- def forM [Monad m] (xs : List a) (f : a → CProxy x' x b' b m PUnit) : CProxy x' x b' b m PUnit :=
+--   List.foldl (fun acc x kreq kresp km kpure =>
+--     acc kreq kresp km (fun _ => f x kreq kresp km kpure)) (CProxy.Pure ()) xs
+
+-- -------------------- ADDITIONAL FUNCTIONS FROM COQ VERSION
+
+-- def mapUpstreamInput
+--   (f : a' → A') (p : CProxy a' a b' b m r) : CProxy A' a b' b m r :=
+--   fun ka' kb' kp kr => p (fun xa' xka => ka' (f xa') xka) kb' kp kr
+
+-- def mapDownstreamInput
+--   (f : A → a) (p : CProxy a' a b' b m r) : CProxy a' A b' b m r :=
+--   fun ka' kb' kp kr => p (fun xa' xka => ka' xa' (xka ∘ f)) kb' kp kr
+
+-- def mapUpstreamOutput
+--   (f : B' → b') (p : CProxy a' a b' b m r) : CProxy a' a B' b m r :=
+--   fun ka' kb' kp kr => p ka' (fun xb xkb' => kb' xb (xkb' ∘ f)) kp kr
+
+-- def mapDownstreamOutput
+--   (f : b → B) (p : CProxy a' a b' b m r) : CProxy a' a b' B m r :=
+--   fun ka' kb' kp kr => p ka' (fun xb xkb' => kb' (f xb) xkb') kp kr
+
+-- -----------------
+
+-- private partial def mapUpstreamInputWithIndexGo [Inhabited r]
+--   (f : Nat -> a' → A') (p : CProxy a' a b' b m r) (acc : Nat) : CProxy A' a b' b m r :=
+--   fun ka kb km kr =>
+--     p
+--       (fun a' _k => ka (f acc a') (fun _a => CProxy.mapUpstreamInputWithIndexGo f p (acc + 1) ka kb km kr))
+--       kb
+--       km
+--       kr
+
+-- def mapUpstreamInputWithIndex [Inhabited r]
+--   (f : Nat -> a' → A') (p : CProxy a' a b' b m r) : CProxy A' a b' b m r :=
+--   CProxy.mapUpstreamInputWithIndexGo f p 0
+
+-- def enumerateUpstreamInput [Inhabited r]
+--   (p : CProxy a' a b' b m r) : CProxy (Nat × a') a b' b m r :=
+--   CProxy.mapUpstreamInputWithIndex (fun acc a' => (acc, a')) p
+
+-- -----------------
+
+-- -- Filter pipe
+-- partial def filter [Inhabited r] (p : a -> Bool) : CPipe a a m r :=
+--   fun ka kb km kp =>
+--     ka () (fun a =>
+--       if p a then kb a (fun _ => filter p ka kb km kp)
+--       else filter p ka kb km kp)
+
+-- -- Take n elements
+-- def take (n : Nat) : CPipe a a m PUnit :=
+--   fun ka kb km kp =>
+--     if n = 0 then kp ()
+--     else ka () (fun a => kb a (fun _ => take (n-1) ka kb km kp))
+
+-- -- Drop n elements
+-- def drop (n : Nat) : CPipe a a m PUnit :=
+--   fun ka kb km kp =>
+--     if n = 0 then cat ka kb km kp
+--     else ka () (fun _ => drop (n-1) ka kb km kp)
+
+-- -- Take while predicate holds
+-- partial def takeWhile (p : a -> Bool) : CPipe a a m PUnit :=
+--   fun ka kb km kp =>
+--     ka () (fun a =>
+--       if p a then kb a (fun _ => takeWhile p ka kb km kp)
+--       else kp ())
+
+-- -- Drop while predicate holds
+-- partial def dropWhile (p : a -> Bool) : CPipe a a m PUnit :=
+--   fun ka kb km kp =>
+--     ka () (fun a =>
+--       if p a then dropWhile p ka kb km kp
+--       else kb a (fun _ => cat ka kb km kp))
+
+-- -- Scan (like fold but emits intermediate results)
+-- partial def scan [Inhabited r]
+--   (f : s → a → s) (init : s) : CPipe a s m r :=
+--   fun ka kb km kp =>
+--     ka () (fun a =>
+--       let new_acc := f init a
+--       kb new_acc (fun _ => CProxy.scan f new_acc ka kb km kp)
+--     )
+
+-- -- Fold over all inputs
+-- private partial def fold (f : s → a → s) (acc : s) : CConsumer a m s := CProxy.Request () fun a => CProxy.fold f (f acc a)
+
+-- -- Convert list to producer
+-- def fromList : List b → CProducer b m PUnit
+-- | []      => CProxy.Pure ()
+-- | (x::xs) => CProxy.Respond x (fun _ => fromList xs)
+
+-- -- Convert array to producer
+-- def fromArray : Array b -> CProducer b m PUnit :=
+--   fromList ∘ Array.toList
+
+-- -- Collect all values into a list
+-- private partial def toListGo [Inhabited a]
+--   (acc : List a) : CConsumer a m (List a) :=
+--   CProxy.Request () fun a => CProxy.toListGo (a :: acc)
+
+-- partial def toList [Inhabited a] : CConsumer a m (List a) := CProxy.toListGo []
+
+-- -- Enumerate with indices
+-- partial def enumerateGo [Inhabited r]
+--   (i : Nat) : CPipe a (Nat × a) m r := CProxy.Request () fun a => CProxy.Respond (i, a) fun _ => CProxy.enumerateGo (i + 1)
+
+-- partial def enumerate  [Inhabited r] : CPipe a (Nat × a) m r := CProxy.enumerateGo 0
+
+-- -- Zip two pipes together
+-- -- def zip {a b r1 r2 m}
+-- --   (p1 : CProducer b m r1) (p2 : CProducer b m r2) : CProducer (a × b) m (Sum r1 r2) :=
+-- --   fun ka kb kp kr =>
+-- --     p1
+-- --       (fun _xka xka =>
+-- --         p2
+-- --           (fun _xkb xkb => ?a)
+-- --           (fun b k2 => ?b)
+-- --           kp
+-- --           (fun r2 => kr (Sum.inr r2)))
+-- --       (fun a k1 => ?c)
+-- --       kp
+-- --       (fun r1 => kr (Sum.inl r1))
+
+-- -- Interleave two producers
+-- -- def interleave (p1 : CProducer b m r) (p2 : CProducer b m r) : CProducer b m r :=
+-- --   fun ka kb km kp =>
+-- --     -- Alternate between p1 and p2
+-- --     sorry
+
+-- -- Duplicate a stream
+-- partial def tee [Inhabited r] : CPipe a (a × a) m r :=
+--   fun ka kb km kp =>
+--     ka () (fun a => kb (a, a) (fun _ => tee ka kb km kp))
+
+-- -- Buffer n elements
+-- -- partial def buffer [Inhabited r] [Inhabited a] (n : Nat) : CPipe a (List a) m r :=
+-- --   fun ka kb km kp =>
+-- --     let rec go acc count :=
+-- --       if count >= n then
+-- --         kb acc.reverse (fun _ => go [] 0)
+-- --       else
+-- --         ka () (fun a => go (a :: acc) (count + 1))
+-- --     go [] 0
+
+-- -- Group consecutive equal elements
+-- -- partial def group [Inhabited r] [Inhabited a] [BEq a] : CPipe a (List a) m r :=
+-- --   fun ka kb km kp =>
+-- --     ka () (fun first =>
+-- --       let rec collect current acc :=
+-- --         ka () (fun a =>
+-- --           if current == a then
+-- --             collect current (a :: acc)
+-- --           else
+-- --            kb acc.reverse (fun _ => collect a [a]))
+-- --      collect first [first])
+
+-- -- Distinct/unique elements only
+-- -- partial def distinct [BEq a] [Inhabited r] [Inhabited a] : CPipe a a m r :=
+-- --   fun ka kb km kp =>
+-- --     let rec go seen :=
+-- --       ka () (fun a =>
+-- --         if seen.contains a then
+-- --           go seen
+-- --         else
+-- --           kb a (fun _ => go (a :: seen)))
+-- --     go []
+
+-- -- Chain multiple pipes together
+-- -- def chain (pipes : List (Pipe a a m PUnit)) : CPipe a a m PUnit :=
+-- --   pipes.foldl (fun acc pipe =>
+-- --     -- Compose pipes: acc >-> pipe
+-- --     sorry) cat
+
+-- -- Repeat a producer infinitely
+-- -- partial def repeatP [Inhabited r] [Inhabited a] (p : CProducer b m PUnit) : CProducer b m r :=
+-- --   fun ka kb km kp =>
+-- --     let rec go :=
+-- --       p ka kb km (fun _ => go)
+-- --     go
+
+-- -- Replicate an element n times
+-- def replicate (n : Nat) (x : b) : CProducer b m PUnit :=
+--   fromList (List.replicate n x)
+
+-- -- Cycle through a list infinitely
+-- -- partial def cycle [Inhabited r] [Inhabited a] : List a → CProducer b m r
+-- -- | [] => CProxy.Pure (by simp) -- empty list case
+-- -- | xs =>
+-- --   fun ka kb km kp =>
+-- --     let rec go := CProxy.fromList xs ka kb km (fun _ => go)
+-- --     go
+
+-- -- Prepend an element to a producer
+-- def cons (x : b) (p : CProducer b m r) : CProducer b m r :=
+--   fun ka kb km kp =>
+--     kb x (fun _ => p ka kb km kp)
+
+-- -- Append an element to a producer
+-- def snoc  (p : CProducer b m PUnit) (x : b) : CProducer b m PUnit :=
+--   fun ka kb km kp =>
+--     p ka kb km (fun _ => kb x (fun _ => kp ()))
+
+-- -- Utilities for working with monadic actions
+-- partial def mapM [Inhabited r] (f : a -> m b) : CPipe a b m r :=
+--   fun ka kb km kp =>
+--     ka () (fun a =>
+--       km b (fun b => kb b (fun _ => CProxy.mapM f ka kb km kp)) (f a))
+
+-- partial def mapM_ [Inhabited a] (f : a -> m PUnit) : CConsumer a m PUnit :=
+--   fun ka kb km kp =>
+--     ka () (fun a =>
+--       km PUnit (fun _ => CProxy.mapM_ f ka kb km kp) (f a))
+
+-- -- Print each element (for debugging)
+-- partial def print [ToString a] [MonadLift IO m] [Inhabited r] : CPipe a a m r :=
+--   fun ka kb km kp =>
+--     ka () (fun a =>
+--       km PUnit (fun _ => kb a (fun _ => print ka kb km kp))
+--              (MonadLift.monadLift (IO.println (toString a))))
+
+-- -- Composition operations (corresponding to Coq operators)
+-- def composeForward
+--   (p0 :     CProxy x' x b' b m a')
+--   (fb : b → CProxy x' x c' c m b') :
+--             CProxy x' x c' c m a' :=
+--   fun ka kb km kp =>
+--     p0 ka
+--       (fun b k => fb b ka kb km (fun b' => k b'))
+--       km
+--       kp
+
+-- def composeBackward
+--     (fb : b → CProxy x' x c' c m b')
+--     (p0 :     CProxy x' x b' b m a') :
+--               CProxy x' x c' c m a' := CProxy.composeForward p0 fb
+
+-- -- Corresponding to Coq notations
+-- -- infixl:60 " //> " => CProxy.composeForward
+-- -- infixl:60 " <\\\\ " => CProxy.composeBackward
+
+-- def pipeOp
+--   {x' x b' b c' c a' α : Type}
+--   (f : α → CProxy x' x b' b m a')
+--   (g : b → CProxy x' x c' c m b')
+--   (a : α) : CProxy x' x c' c m a' := CProxy.composeForward (f a) g -- f a //> g
+
+-- -- infixl:60 " />/ " => CProxy.pipeOp
+
+-- -- Backward composition (rofP in Coq)
+
+-- -- Push category - corresponds to pushR in Coq
+-- def pushR
+--   (p0 : CProxy a' a b' b m r)
+--   (fb : b → CProxy b' b c' c m r) :
+--   CProxy a' a c' c m r :=
+--   fun ka kb km kp =>
+--     p0 ka
+--       (fun b k =>
+--         fb b
+--           (fun b' _k' =>
+--             k b')
+--           kb
+--           km
+--           kp)
+--       km
+--       kp
+
+-- -- Pull category - corresponds to pullR in Coq
+-- def pullR
+--   (fb' : b' → CProxy a' a b' b m r)
+--   (p0 : CProxy b' b c' c m r) :
+--   CProxy a' a c' c m r :=
+--   fun ka kb km kp =>
+--     p0
+--       (fun b' k => fb' b' ka (fun b _k' => k b) km kp)
+--       kb
+--       km
+--       kp
+
+-- infixl:60 " //> " => CProxy.forP
+-- infixl:60 " >\\\\ " => CProxy.rofP
+-- infixl:60 " >>~ " => CProxy.pushR
+-- infixl:60 " +>> " => CProxy.pullR
+
+-- -- Function composition versions
+-- def forPFunc
+--   (f : a' → CProxy x' x b' b m a')
+--   (g : b → CProxy x' x c' c m b') :
+--   a' → CProxy x' x c' c m a' := fun a => f a //> g
+
+-- def rofPFunc
+--   (f : b' → CProxy a' a y' y m b)
+--   (g : c → CProxy b' b y' y m c) :
+--   c → CProxy a' a y' y m c := fun c => f >\\ g c
+
+-- def pushRFunc
+--   (f : a' → CProxy a' a b' b m r)
+--   (g : b → CProxy b' b c' c m r) :
+--   a' → CProxy a' a c' c m r := fun a => f a >>~ g
+
+-- def pullRFunc
+--   (f : b' → CProxy a' a b' b m r)
+--   (g : c' → CProxy b' b c' c m r) :
+--   c' → CProxy a' a c' c m r := fun c => f +>> g c
+
+-- infixl:60 " />/ " => CProxy.forPFunc
+-- infixl:60 " \\>\\ " => CProxy.rofPFunc
+-- infixl:60 " >~> " => CProxy.pushRFunc
+-- infixl:60 " >+> " => CProxy.pullRFunc
+
+-- -- Backward versions (matching Coq notation)
+-- infixl:60 " <// " => fun f x => x //> f
+-- infixl:60 " //< " => fun x f => f >\\ x
+-- infixl:60 " ~<< " => fun f x => x >>~ f
+-- infixl:60 " <<+ " => fun x f => f +>> x
+
+-- -- Function composition backward versions
+-- infixl:60 " \\<\\ " => fun g f => f />/ g
+-- infixl:60 " /</ " => fun g f => f \>\ g
+-- infixl:60 " <~< " => fun g f => f >~> g
+-- infixl:60 " <+< " => fun g f => f >+> g
+
+-- -- Reflect operation (dual)
+-- def reflect [Monad m] (p : CProxy a' a b' b m r) : CProxy b b' a a' m r :=
+--   fun {x}
+--     (bHandler : b → (b' → x) → x)
+--     (aHandler : a' → (a → x) → x)
+--     (mHandler : ∀ t, (t → x) → m t → x)
+--     (pureHandler : r → x) =>
+--       p aHandler bHandler mHandler pureHandler
+
+-- namespace CProxyCategoryLaws
+
+-- -- ============================================================================
+-- -- Respond Category Laws
+-- -- ============================================================================
+
+-- section RespondCategory
+
+
+-- -- infixl:55  " >>= " => CProxy.bind
+
+-- -- Right identity law for respond category
+-- -- theorem respond_right_id (f : b → CProxy x' x a' a m b') :
+-- --   f />/ CProxy.respond = f :=
+-- -- by
+-- --   funext b
+-- --   simp [Proxy.forPFunc, CProxy.forP, CProxy.respond, CProxy.Pure]
+-- --   -- This follows from the fact that respond is the identity in the respond category
+-- --   sorry
+
+-- -- Left identity law for respond category
+-- -- theorem respond_left_id (f : b → CProxy x' x a' a m b') :
+-- --     CProxy.respond />/ f = f :=
+-- -- by
+-- --   funext b
+-- --   simp [Proxy.forPFunc, CProxy.forP, CProxy.respond, CProxy.Pure]
+-- --   -- This is immediate from the definition
+-- --   rfl
+
+-- -- Respond category composition distributes over Kleisli composition
+-- -- theorem respond_distrib (f : a → CProxy x' x b' b m a') (g : a' → CProxy x' x b' b m r)
+-- --     (h : b → CProxy x' x c' c m b') :
+-- --     (fun x => f x >>= g) />/ h = fun x => (f />/ h) x >>= (g />/ h) :=
+-- -- by
+-- --   funext x
+-- --   -- The proof involves showing that forP distributes over bind
+-- --   -- This follows from the monad laws for CProxy
+-- --  simp [Proxy.forPFunc, CProxy.forP, CProxy.bind]
+-- --  sorry -- Detailed proof would involve induction on the CProxy structure
+
+
+-- -- Associativity law for respond category
+-- -- theorem respond_assoc
+-- --   (f : a → CProxy x' x a' a m b')
+-- --   (g : b' → CProxy x' x a' a m c')
+-- --   (h : c' → CProxy x' x a' a m d') :
+-- --   (f />/ g) />/ h = f />/ (g />/ h) :=
+-- -- by
+-- --   funext a
+-- --   simp [Proxy.forPFunc, CProxy.forP]
+-- --   -- This follows from the associativity of the underlying composition
+-- --   sorry
+-- --
+-- -- -- Zero law for respond category
+-- -- theorem respond_zero (f : c → CProxy a' a b' b m r) :
+-- --     (fun _ => CProxy.Pure r) />/ f = fun _ => CProxy.Pure r :=
+-- -- by
+-- --   funext c
+-- --   simp [Proxy.forPFunc, CProxy.forP, CProxy.Pure]
+-- --   rfl
+
+-- end RespondCategory
+
+-- -- ============================================================================
+-- -- Request Category Laws
+-- -- ============================================================================
+
+-- section RequestCategory
+
+-- variable {x' x y' y a' a b' b c' c r : Type u}
+
+-- -- -- Request category composition distributes over Kleisli composition
+-- -- theorem request_distrib (f : c → CProxy b' b y' y m c') (g : c' → CProxy b' b y' y m r)
+-- --     (h : b' → CProxy a' a y' y m b) :
+-- --     h \>\ (fun x => f x >>= g) = fun x => (h \>\ f) x >>= (h \>\ g) :=
+-- -- by
+-- --   funext c
+-- --   simp [Proxy.rofPFunc, CProxy.rofP, CProxy.bind]
+-- --   sorry
+-- --
+-- -- -- Right identity law for request category
+-- -- theorem request_right_id (f : b' → CProxy a' a y' y m b) :
+-- --     f \>\ (fun _ => CProxy.Pure r) = fun _ => CProxy.Pure r :=
+-- -- by
+-- --   funext b'
+-- --   simp [Proxy.rofPFunc, CProxy.rofP, CProxy.Pure]
+-- --   sorry
+-- --
+-- -- -- Left identity law for request category
+-- -- theorem request_left_id (f : b' → CProxy a' a y' y m b) :
+-- --     CProxy.request \>\ f = f :=
+-- -- by
+-- --   funext b'
+-- --   simp [Proxy.rofPFunc, CProxy.rofP, CProxy.request, CProxy.Pure]
+-- --   sorry
+-- --
+-- -- -- Associativity law for request category
+-- -- theorem request_assoc (f : b' → CProxy a' a y' y m b) (g : a' → CProxy c' c y' y m a)
+-- --     (h : c' → CProxy d' d y' y m c) :
+-- --     f \>\ (g \>\ h) = (f \>\ g) \>\ h :=
+-- -- by
+-- --   funext b'
+-- --   simp [Proxy.rofPFunc, CProxy.rofP]
+-- --   sorry
+
+-- end RequestCategory
+
+-- -- ============================================================================
+-- -- Push Category Laws
+-- -- ============================================================================
+
+-- section PushCategory
+
+-- variable {a' a b' b c' c r : Type u}
+
+-- -- Right identity law for push category
+-- -- theorem push_right_id (f : b → CProxy b' b c' c m r) :
+-- --     CProxy.Pure r >~> f = fun _ => CProxy.Pure r :=
+-- -- by
+-- --   funext b
+-- --   simp [Proxy.pushRFunc, CProxy.pushR, CProxy.Pure]
+-- --   sorry
+-- --
+-- -- -- Left identity law for push category
+-- -- theorem push_left_id (f : a → CProxy a' a b' b m r) :
+-- --     f >~> (fun _ => CProxy.Pure r) = fun _ => CProxy.Pure r :=
+-- -- by
+-- --   funext a
+-- --   simp [Proxy.pushRFunc, CProxy.pushR, CProxy.Pure]
+-- --   sorry
+-- --
+-- -- -- Associativity law for push category
+-- -- theorem push_assoc (f : a → CProxy a' a b' b m r) (g : b → CProxy b' b c' c m r)
+-- --     (h : c → CProxy c' c d' d m r) :
+-- --     f >~> (g >~> h) = (f >~> g) >~> h :=
+-- -- by
+-- --   funext a
+-- --   simp [Proxy.pushRFunc, CProxy.pushR]
+-- --   sorry
+
+-- end PushCategory
+
+-- -- ============================================================================
+-- -- Pull Category Laws
+-- -- ============================================================================
+
+-- section PullCategory
+
+-- variable {a' a b' b c' c r : Type u}
+
+-- -- Right identity law for pull category
+-- -- theorem pull_right_id (f : b' → CProxy a' a b' b m r) :
+-- --     f >+> (fun _ => CProxy.Pure r) = fun _ => CProxy.Pure r :=
+-- -- by
+-- --   funext b'
+-- --   simp [Proxy.pullRFunc, CProxy.pullR, CProxy.Pure]
+-- --   sorry
+-- --
+-- -- -- Left identity law for pull category
+-- -- theorem pull_left_id (f : c' → CProxy b' b c' c m r) :
+-- --     (fun _ => CProxy.Pure r) >+> f = fun _ => CProxy.Pure r :=
+-- -- by
+-- --   funext c'
+-- --   simp [Proxy.pullRFunc, CProxy.pullR, CProxy.Pure]
+-- --   sorry
+-- --
+-- -- -- Associativity law for pull category
+-- -- theorem pull_assoc (f : b' → CProxy a' a b' b m r) (g : c' → CProxy b' b c' c m r)
+-- --     (h : d' → CProxy c' c d' d m r) :
+-- --     f >+> (g >+> h) = (f >+> g) >+> h :=
+-- -- by
+-- --   funext b'
+-- --   simp [Proxy.pullRFunc, CProxy.pullR]
+-- --   sorry
+-- --
+-- -- -- Mixed associativity law (push and pull)
+-- -- theorem push_pull_assoc (f : b' → CProxy a' a b' b m r) (g : a → CProxy b' b c' c m r)
+-- --     (h : c → CProxy c' c b' b m r) :
+-- --     (f >+> g) >~> h = f >+> (g >~> h) :=
+-- -- by
+-- --   funext b'
+-- --   simp [Proxy.pullRFunc, CProxy.pushRFunc, CProxy.pullR, CProxy.pushR]
+-- --   sorry
+
+-- end PullCategory
+
+-- -- ============================================================================
+-- -- Reflection (Duality) Laws
+-- -- ============================================================================
+
+-- section ReflectionLaws
+
+-- variable {a' a b' b r : Type u}
+
+-- -- -- Reflect preserves composition structure
+-- -- theorem reflect_request_id :
+-- --     (fun x => CProxy.reflect (CProxy.request x)) = @Proxy.respond a' a b' b m :=
+-- -- by
+-- --   funext x
+-- --   simp [Proxy.reflect, CProxy.request, CProxy.respond]
+-- --   rfl
+-- --
+-- -- theorem reflect_respond_id :
+-- --     (fun x => CProxy.reflect (CProxy.respond x)) = @Proxy.request a' a b' b m :=
+-- -- by
+-- --   funext x
+-- --   simp [Proxy.reflect, CProxy.request, CProxy.respond]
+-- --   rfl
+-- --
+-- -- -- Reflect distributes over bind
+-- -- theorem reflect_distrib (f : a → CProxy a' a b' b m r) (g : r → CProxy a' a b' b m r) (x : a) :
+-- --     CProxy.reflect (f x >>= g) = CProxy.reflect (f x) >>= (CProxy.reflect ∘ g) :=
+-- -- by
+-- --   simp [Proxy.reflect, CProxy.bind, Function.comp]
+-- --   sorry
+-- --
+-- -- -- Reflect composition laws
+-- -- theorem reflect_request_comp (f : a → CProxy a' a b' b m r) (g : a → CProxy a r b' b m r) :
+-- --     (fun x => CProxy.reflect (f \>\ g) x) =
+-- --     (fun x => (CProxy.reflect ∘ g) />/ (CProxy.reflect ∘ f)) :=
+-- -- by
+-- --   funext x
+-- --   simp [Proxy.reflect, CProxy.rofPFunc, CProxy.forPFunc, Function.comp]
+-- --   sorry
+-- --
+-- -- theorem reflect_respond_comp (f : a → CProxy a' a b' b m r) (g : b → CProxy a' a b' b m b') :
+-- --     (fun x => CProxy.reflect (f />/ g) x) =
+-- --     (fun x => (CProxy.reflect ∘ g) \>\ (CProxy.reflect ∘ f)) :=
+-- -- by
+-- --   funext x
+-- --   simp [Proxy.reflect, CProxy.forPFunc, CProxy.rofPFunc, Function.comp]
+-- --   sorry
+-- --
+-- -- -- Distributivity law for reflection
+-- -- theorem reflect_distributivity (f : a → CProxy a' a b' b m r) (g : r → CProxy a' a b' b m r) :
+-- --     (fun x => CProxy.reflect ((f >=> g) x)) =
+-- --     (fun x => ((Proxy.reflect ∘ f) >=> (CProxy.reflect ∘ g)) x) :=
+-- -- by
+-- --   funext x
+-- --   simp [Function.comp, Monad.kleisliRight]
+-- --   exact reflect_distrib f g x
+-- --
+-- -- -- Zero law for reflection
+-- -- theorem reflect_zero :
+-- --     @Proxy.reflect m _ a' a b' b r ∘ CProxy.Pure = CProxy.Pure :=
+-- -- by
+-- --   funext r
+-- --   simp [Proxy.reflect, CProxy.Pure, Function.comp]
+-- --   rfl
+-- --
+-- -- -- Involution law (reflect is its own inverse)
+-- -- theorem reflect_involution :
+-- --     @Proxy.reflect m _ a' a b' b r ∘ CProxy.reflect = id :=
+-- -- by
+-- --   funext p
+-- --   simp [Proxy.reflect, Function.comp, id]
+-- --   -- This requires structural induction on the CProxy
+-- --   sorry
+
+-- end ReflectionLaws
+
+-- -- ============================================================================
+-- -- Category Theory Instance (for one of the categories as an example)
+-- -- ============================================================================
+
+-- section CategoryInstance
+
+-- -- -- We can define the Respond category as a Category Theory category
+-- -- instance RespondCategory {x' x : Type u} : CategoryTheory.Category (Type u × Type u) where
+-- --   Hom := fun A B => B.2 → CProxy x' x A.1 A.2 m B.1
+-- --   id := fun A => @Proxy.respond x' x A.1 A.2 m
+-- --   comp := fun f g => g />/ f
+-- --   id_comp := by
+-- --     intro A B f
+-- --     exact respond_left_id f
+-- --   comp_id := by
+-- --     intro A B f
+-- --     exact respond_right_id f
+-- --   assoc := by
+-- --     intro A B C D f g h
+-- --     exact (respond_assoc h g f).symm
+
+-- end CategoryInstance
+
+-- -- ============================================================================
+-- -- Additional utility theorems
+-- -- ============================================================================
+
+-- section UtilityTheorems
+
+-- -- -- Composition with pure
+-- -- theorem comp_pure_left {f : b → CProxy x' x c' c m b'} :
+-- --     (fun _ => CProxy.Pure r) />/ f = fun _ => CProxy.Pure r :=
+-- -- respond_zero f
+-- --
+-- -- theorem comp_pure_right {f : b → CProxy x' x a' a m b'} :
+-- --     f />/ (fun _ => CProxy.Pure r) = fun _ => f _ >>= (fun _ => CProxy.Pure r) :=
+-- -- by
+-- --   funext b
+-- --   simp [Proxy.forPFunc, CProxy.forP, CProxy.Pure, CProxy.bind]
+-- --   sorry
+
+-- -- Properties of request and respond
+-- theorem request_pure_eq :
+--     CProxy.request >=> CProxy.Pure = @CProxy.request a' a b' b m :=
+-- by
+--   funext a'
+--   simp [CProxy.request, CProxy.Pure, CProxy.bind]
+--   rfl
+
+-- theorem respond_pure_eq :
+--     CProxy.respond >=> CProxy.Pure = @CProxy.respond a' a b' b m :=
+-- by
+--   funext b
+--   simp [CProxy.respond, CProxy.Pure, CProxy.bind]
+--   rfl
+
+-- end UtilityTheorems
+
+-- end CProxyCategoryLaws
+
+-- ----------------- namespace Examples1
+-- ----------------- -- Suppose we have some simple CProducers (e.g., Source) and CPipes (e.g., Transform)
+-- -----------------
+-- -----------------   -- CProducer that creates 5 numbers and stops
+-- -----------------   def numberProducer : CProducer Nat m PUnit :=
+-- -----------------     fun _ka kb _km kp =>
+-- -----------------       kb 1 (fun _ =>
+-- -----------------       kb 2 (fun _ =>
+-- -----------------       kb 3 (fun _ =>
+-- -----------------       kb 4 (fun _ =>
+-- -----------------       kb 5 (fun _ =>
+-- -----------------       kp ())))))
+-- -----------------
+-- -----------------   -- Alternative using fromList (more idiomatic)
+-- -----------------   def numberProducer' : CProducer Nat m PUnit :=
+-- -----------------     CProxy.fromList [1, 2, 3, 4, 5]
+-- -----------------
+-- -----------------   -- CPipe that takes Nat, adds 10, converts to String
+-- -----------------   partial def addTenToString : CPipe Nat String m PUnit :=
+-- -----------------     fun ka kb _km kp =>
+-- -----------------       ka () (fun n =>
+-- -----------------         kb (toString (n + 10)) (fun _ =>
+-- -----------------           addTenToString ka kb (fun _ f mt => f mt) kp))
+-- -----------------
+-- -----------------   -- Alternative using mapM (if you had it working)
+-- -----------------   def addTenToString' : CPipe Nat String Id PUnit :=
+-- -----------------     CProxy.mapM (fun n => pure (toString (n + 10)))
+-- -----------------
+-- -----------------   -- CConsumer that concatenates all strings
+-- -----------------   partial def concatConsumer : CConsumer String (StateM String) PUnit :=
+-- -----------------     fun ka _kb km kp =>
+-- -----------------       ka () (fun s =>
+-- -----------------         km PUnit (fun _ => concatConsumer ka (fun x _ => PEmpty.elim x) km kp)
+-- -----------------               (modify (fun acc => acc ++ s)))
+-- -----------------
+-- -----------------   -- Alternative consumer that returns the final result
+-- -----------------   partial def concatConsumer' : CConsumer String (StateM String) String :=
+-- -----------------     fun ka _kb km kp =>
+-- -----------------       ka () (fun s =>
+-- -----------------         km PUnit (fun _ =>
+-- -----------------           km String kp (do
+-- -----------------             modify (fun acc => acc ++ s)
+-- -----------------             get))
+-- -----------------           (modify (fun acc => acc ++ s)))
+-- -----------------
+-- -----------------   -- Simple fold-based consumer (more direct)
+-- -----------------   def stringFoldConsumer : CConsumer String m (List String) :=
+-- -----------------     CProxy.fold (fun acc s => s :: acc) []
+-- -----------------
+-- -----------------   -- Fixed pipeline using the correct composition operator
+-- -----------------   def completePipeline : Effect (StateM String) PUnit :=
+-- -----------------     numberProducer //> (addTenToString //> concatConsumer)
+-- -----------------
+-- -----------------   -- Alternative syntax using the function composition version
+-- -----------------   def completePipeline' : Effect (StateM String) PUnit :=
+-- -----------------     (fun _ => numberProducer) />/ (fun _ => addTenToString //> concatConsumer) $ ()
+-- -----------------
+-- -----------------   -- Or using the push composition for a more idiomatic feel
+-- -----------------   def completePipeline'' : Effect (StateM String) PUnit :=
+-- -----------------     numberProducer >>~ (fun _ => addTenToString //> concatConsumer)
+-- ----------------- end Examples1
+-- -----------------
+-- ----------------- namespace Examples
+-- -----------------
+-- ----------------- def numbers : Nat -> CProducer Nat m PUnit
+-- -----------------   | 0 => CProxy.Pure ()
+-- -----------------   | n+1 => CProxy.Respond n (fun () => numbers n)
+-- -----------------
+-- ----------------- partial def consume : CConsumer Nat (StateM (List Nat)) PUnit :=
+-- -----------------   CProxy.Request () (fun n =>
+-- -----------------     CProxy.bind (CProxy.M (modify (fun s => s ++ [n]))) (fun _ =>
+-- -----------------     consume))
+-- -----------------
+-- ----------------- -- Example pipeline
+-- ----------------- def examplePipeline : Effect (StateM (List Nat)) PUnit := numbers 5 >-> consume
+-- -----------------
+-- ----------------- def exampleIO : List Nat := ((Proxy.runEffect examplePipeline).run []).run.2
+-- -----------------
+-- ----------------- -- #guard exampleIO = [1, 2, 3, 4, 5]
+-- -----------------
+-- ----------------- -- Example: sum consumer
+-- ----------------- partial def summer : CConsumer Nat (StateM Nat) PUnit :=
+-- -----------------   CProxy.Request () (fun n =>
+-- -----------------     CProxy.bind (CProxy.M (modify (· + n))) (fun _ => summer))
+-- -----------------
+-- ----------------- -- Example: pipeline with new functions
+-- ----------------- def producer : CProducer Nat Id PUnit :=
+-- -----------------   CProxy.fromList [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+-- -----------------
+-- ----------------- def pipeline1 : CPipe Nat Nat Id PUnit :=
+-- -----------------   CProxy.filter (· % 2 = 0)  -- Keep even numbers
+-- -----------------
+-- ----------------- def pipeline3 : CPipe Nat Nat Id PUnit :=
+-- -----------------   CProxy.take 3              -- Take first 3
+-- -----------------
+-- ----------------- def pipeline4 : CPipe Nat (Nat × Nat) Id PUnit :=
+-- -----------------   CProxy.enumerate
+-- -----------------
+-- ----------------- -- More examples
+-- ----------------- def exampleFromArray : CProducer String Id PUnit :=
+-- -----------------   CProxy.fromArray #["hello", "world", "pipes"]
+-- -----------------
+-- ----------------- def exampleScan : CProducer Nat Id PUnit -> CProducer Nat Id PUnit :=
+-- -----------------   fun input => sorry -- input //> CProxy.scan (·+·) 0
+-- -----------------
+-- ----------------- -- Example using forward composition
+-- ----------------- def composedPipeline := producer ??? pipeline1 //> pipeline2 //> pipeline3 ?? summer
+-- -----------------
+-- ----------------- -- Example using function composition
+-- ----------------- def filterEven : CPipe Nat Nat Id PUnit := CProxy.filter (· % 2 = 0)
+-- ----------------- def takeThree : CPipe Nat Nat Id PUnit := CProxy.take 3
+-- -----------------
+-- ----------------- def composedFunc := filterEven />/ takeThree
+-- -----------------
+-- ----------------- end Examples
