@@ -4,7 +4,7 @@ namespace CProxy
 
 -- Run functions
 abbrev CProxy.runEffect [Monad m] (eff : CProxy PEmpty a b' PEmpty m r) : m r :=
-  eff
+  eff (m r)
     (fun x _ => PEmpty.elim x) -- Handle Request (impossible)
     (fun x _ => PEmpty.elim x) -- Handle Respond (impossible)
     (fun _ f mt => mt >>= f)   -- Handle M
@@ -17,9 +17,9 @@ def forP
   (p0 : CProxy x' x b' b m a')
   (fb : b → CProxy x' x c' c m b') :
   CProxy x' x c' c m a' :=
-  fun ka kb km kp =>
-    p0 ka
-      (fun b k => fb b ka kb km (fun b' => k b'))
+  fun s ka kb km kp =>
+    p0 s ka
+      (fun b k => fb b s ka kb km (fun b' => k b'))
       km
       kp
 
@@ -33,9 +33,9 @@ def rofP
   (fb' : b' → CProxy a' a y' y m b)
   (p0 : CProxy b' b y' y m c) :
   CProxy a' a y' y m c :=
-  fun ka kb km kp =>
-    p0
-      (fun b' k => fb' b' ka kb km (fun b => k b))
+  fun s ka kb km kp =>
+    p0 s
+      (fun b' k => fb' b' s ka kb km (fun b => k b))
       kb
       km
       kp

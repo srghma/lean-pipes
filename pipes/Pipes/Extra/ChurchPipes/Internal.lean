@@ -1,5 +1,5 @@
 abbrev CProxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1) :=
-  ∀ {s : Type u},
+  ∀ (s : Type u),
     (a' → (a → s) → s) →       -- Handle Request
     (b → (b' → s) → s) →       -- Handle Respond
     (∀ x, (x → s) → m x → s) → -- Handle
@@ -10,16 +10,16 @@ namespace CProxy
 
 -- Basic constructors
 abbrev Pure (xr : r) : CProxy a' a b' b m r :=
-  fun _ka _kb _km kp => kp xr
+  fun _s _ka _kb _km kp => kp xr
 
 abbrev Request (xa' : a') (k : a → CProxy a' a b' b m r) : CProxy a' a b' b m r :=
-  fun ka kb km kp => ka xa' (fun a => k a ka kb km kp)
+  fun s ka kb km kp => ka xa' (fun xa => k xa s ka kb km kp)
 
 abbrev Respond (xb : b) (k : b' → CProxy a' a b' b m r) : CProxy a' a b' b m r :=
-  fun ka kb km kp => kb xb (fun b' => k b' ka kb km kp)
+  fun s ka kb km kp => kb xb (fun b' => k b' s ka kb km kp)
 
 abbrev M (mx : m r) : CProxy a' a b' b m r :=
-  fun _ka _kb km kp => km r kp mx
+  fun _s _ka _kb km kp => km r kp mx
 
 -- Fold function (trivial for Church encoding)
 abbrev foldProxy
@@ -28,15 +28,15 @@ abbrev foldProxy
   (km : (x : Type u) → (x → s) → m x → s)
   (kp : r → s)
   (p : CProxy a' a b' b m r) : s :=
-  p ka kb km kp
+  p s ka kb km kp
 
 -- Bind operation
 abbrev bind
   (p0 : CProxy a' a b' b m c)
   (f : c → CProxy a' a b' b m d) :
   CProxy a' a b' b m d :=
-  fun ka kb km kp =>
-    p0 ka kb km (fun c => f c ka kb km kp)
+  fun s ka kb km kp =>
+    p0 s ka kb km (fun c => f c s ka kb km kp)
 
 abbrev map (f : r → s) (p : CProxy a' a b' b m r) : CProxy a' a b' b m s := bind p (Pure ∘ f)
 abbrev seq (pf : CProxy a' a b' b m (r → s)) (px : PUnit → CProxy a' a b' b m r) : CProxy a' a b' b m s := bind pf (map · (px ()))
