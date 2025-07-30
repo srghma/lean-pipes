@@ -111,7 +111,7 @@ def Pipe.Fueled.mapM [Monad m] (f : a → m b) (d : r) (fuel : Nat) : Pipe a b m
           mapM f d (fuel - 1)
   decreasing_by
     apply Nat.sub_lt
-    · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all [beq_iff_eq];)
+    · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all)
     · exact Nat.zero_lt_one
 
 partial def Pipe.Unbounded.mapM [Inhabited r] (f : a -> m b) : Pipe a b m r :=
@@ -232,7 +232,7 @@ private def Fueled.findIndices.go
   termination_by fuel
   decreasing_by
     apply Nat.sub_lt
-    · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all [beq_iff_eq];)
+    · exact Nat.zero_lt_of_ne_zero (by intro h; simp_all)
     · exact Nat.zero_lt_one
 
 def Fueled.findIndices (p : a → Bool) (d : r) (fuel : Nat) : Pipe a Nat m r := Proxy.Fueled.findIndices.go p d fuel 0

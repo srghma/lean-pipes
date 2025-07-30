@@ -17,8 +17,8 @@ theorem map_compose
     = Fueled.mapPipe d fuel f
       >-> Fueled.mapPipe (m := m) d fuel g := by
         induction fuel with
-        | zero => simp only [Fueled.cat, Fueled.pull, Fueled.mapPipe, connect, pullR]
-        | succ n ih => simp_all [Fueled.mapPipe, connect, pullR, pullR.go, ih]
+        | zero => simp only [Fueled.mapPipe, connect, pullR]
+        | succ n ih => simp_all [Fueled.mapPipe, connect, pullR, pullR.go]
 
 theorem toListM_each_id {a : Type 0} {m : Type 0 -> Type 0} [Monad m] [LawfulMonad m] (xs : List a) :
   toListM (each xs) = Pure.pure (f := m) xs := by

@@ -6,26 +6,26 @@ namespace ForLaws
 
 theorem for_respond_f (f : b → Proxy x' x c' c m PUnit) (x_val : b) :
   Proxy.respond x_val //> f = f x_val := by
-  simp_all [Proxy.respond, Proxy.request]
+  simp_all [Proxy.respond]
   induction f x_val with
   | Pure a' => rfl
   | Respond b k ih =>
-    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    simp_all
   | Request x' k ih =>
-    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    simp_all
   | M mx ih =>
-    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    simp_all
 
 theorem for_respond (s : Proxy x' x PUnit b m PUnit) :
   s //> Proxy.respond = s := by
   induction s with
   | Pure a' => rfl
   | Respond b k ih =>
-    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    simp_all [Proxy.forP]
   | Request x' k ih =>
-    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    simp_all [Proxy.forP]
   | M mx ih =>
-    simp_all [(· >=> ·), Proxy.forP, Bind.bind]
+    simp_all [Proxy.forP]
 
 theorem nested_for_a
   (s : Proxy x' x b' b m a')
@@ -46,10 +46,10 @@ theorem nested_for_a
         | Respond b2 k2 ih2 => simp_all
         | Request x' k ih => simp_all
         | M mx ih => simp_all
-      | Request x' k ih => simp_all [Bind.bind]
-      | M mx ih => simp_all [Bind.bind]
-    | Request x' k ih => simp_all [Bind.bind]
-    | M mx ih => simp_all [Bind.bind]
+      | Request x' k ih => simp_all
+      | M mx ih => simp_all
+    | Request x' k ih => simp_all
+    | M mx ih => simp_all
 
 theorem nested_for_b
   (s : Proxy x' x b' b m a')
@@ -71,7 +71,7 @@ theorem respondDistrib
   (h : b → Proxy x' x c' c m b') :
   (f >=> g) />/ h = (f />/ h) >=> (g />/ h) := by
   funext a
-  simp_all [(· >=> ·), Bind.bind, Proxy.bind]
+  simp_all [(· >=> ·), Bind.bind]
   induction f a with
   | Pure a' => rfl
   | Respond b k ih =>
@@ -122,21 +122,21 @@ theorem pushPullAssoc
     funext arg
     induction g arg generalizing f h with
     | Pure r => simp [Proxy.pullR, Proxy.pushR]
-    | M mx k ih => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
+    | M mx k ih => simp_all [Proxy.pushR, Proxy.pullR]
     | Request a k ih =>
-      simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
+      simp_all [Proxy.pushR, Proxy.pullR]
       induction f a generalizing k h with
-      | Pure r => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
-      | M mx k ih => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
-      | Request a2 k2 ih2 => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
-      | Respond x2 k2 ih2 => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
+      | Pure r => simp_all [Proxy.pushR, Proxy.pullR.go]
+      | M mx k ih => simp_all [Proxy.pushR, Proxy.pullR.go]
+      | Request a2 k2 ih2 => simp_all [Proxy.pushR, Proxy.pullR.go]
+      | Respond x2 k2 ih2 => simp_all [Proxy.pullR.go]
     | Respond x k ih =>
-      simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
+      simp_all [Proxy.pushR, Proxy.pullR]
       induction h x generalizing k f with
-      | Pure r => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
-      | M mx k ih => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
-      | Request a2 k2 ih2 => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
-      | Respond x2 k2 ih2 => simp_all [Proxy.pushR, Proxy.pushR.go, Proxy.pullR, Proxy.pullR.go, ih]
+      | Pure r => simp_all [Proxy.pushR.go, Proxy.pullR]
+      | M mx k ih => simp_all [Proxy.pushR.go, Proxy.pullR]
+      | Request a2 k2 ih2 => simp_all [Proxy.pushR.go]
+      | Respond x2 k2 ih2 => simp_all [Proxy.pushR.go, Proxy.pullR]
 
 namespace PushCategory
 
@@ -201,13 +201,13 @@ theorem pull_assoc
   h +>> (g +>> p) = (fun a => h +>> g a) +>> p := by
   induction p generalizing h g with
   | Pure r => simp [Proxy.pullR]
-  | M mx k ih => simp_all [Proxy.pullR, Proxy.pullR.go, ih]
+  | M mx k ih => simp_all
   | Request a k ih =>
     simp [Proxy.pullR]
     induction g a generalizing k h with
     | Pure r => simp [Proxy.pullR, Proxy.pullR.go]
-    | M mx k ih2 => simp [Proxy.pullR, Proxy.pullR.go, ih, ih2]
-    | Respond x2 k2 ih2 => simp [Proxy.pullR, Proxy.pullR.go, ih, ih2]
+    | M mx k ih2 => simp [Proxy.pullR.go, ih, ih2]
+    | Respond x2 k2 ih2 => simp [Proxy.pullR.go, ih]
     | Request a2 k2 ih2 =>
       simp [Proxy.pullR, Proxy.pullR.go]
       induction h a2 generalizing k k2 with
@@ -215,7 +215,7 @@ theorem pull_assoc
       | M mx k ih3 => simp_all [Proxy.pullR.go]
       | Respond x3 k3 ih3 => simp_all [Proxy.pullR.go]
       | Request a3 k3 ih3 => simp_all [Proxy.pullR.go]
-  | Respond x k ih => simp_all [Proxy.pullR, Proxy.pullR.go, ih]
+  | Respond x k ih => simp_all
 
 
 end PullCategory
@@ -224,7 +224,7 @@ namespace Duals
 
 theorem requestId : Proxy.reflect ∘ Proxy.request = @Proxy.respond a' a b' b m := by
   funext x
-  simp [Proxy.reflect, Proxy.request, Proxy.respond]
+  simp [Proxy.reflect, Proxy.respond]
 
 theorem reflectDistrib (f : a → Proxy a' a b' b m r)
                        (g : r → Proxy a' a b' b m r) (x : a) :

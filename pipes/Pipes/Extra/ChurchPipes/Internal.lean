@@ -1,5 +1,5 @@
-abbrev CProxy (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1) :=
-  ∀ (s : Type u),
+abbrev CProxy.{u, w} (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (max (u+1) (w+1)) :=
+  ∀ (s : Type w),
     (a' → (a → s) → s) →       -- Handle Request
     (b → (b' → s) → s) →       -- Handle Respond
     (∀ x, (x → s) → m x → s) → -- Handle

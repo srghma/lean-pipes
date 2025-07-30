@@ -3,7 +3,7 @@ import Pipes.Extra.ChurchPipes.Internal
 namespace CProxy
 
 -- Run functions
-abbrev CProxy.runEffect [Monad m] (eff : CProxy PEmpty a b' PEmpty m r) : m r :=
+abbrev CProxy.runEffect {m : Type u → Type u} {a b' r : Type u} [Monad m] (eff : CProxy.{u} PEmpty a b' PEmpty m r) : m r :=
   eff (m r)
     (fun x _ => PEmpty.elim x) -- Handle Request (impossible)
     (fun x _ => PEmpty.elim x) -- Handle Respond (impossible)
