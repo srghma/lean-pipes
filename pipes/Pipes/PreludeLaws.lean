@@ -11,7 +11,7 @@ theorem map_id (d : r) (fuel : Nat) :
   | succ n ih => simp only [Fueled.cat, Fueled.pull, Fueled.mapPipe, ih]
 
 theorem map_compose
-  {m : Type → Type} (d : r) (fuel : Nat)
+  (d : r) (fuel : Nat)
   (f : a → b) (g : b → c) :
   Fueled.mapPipe d fuel (g ∘ f)
     = Fueled.mapPipe d fuel f
@@ -20,7 +20,7 @@ theorem map_compose
         | zero => simp only [Fueled.mapPipe, connect, pullR]
         | succ n ih => simp_all [Fueled.mapPipe, connect, pullR, pullR.go]
 
-theorem toListM_each_id {a : Type 0} {m : Type 0 -> Type 0} [Monad m] [LawfulMonad m] (xs : List a) :
+theorem toListM_each_id [Monad m] [LawfulMonad m] (xs : List a) :
   toListM (each xs) = Pure.pure (f := m) xs := by
   induction xs with
   | nil => simp_all [each, toListM]

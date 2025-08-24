@@ -1,4 +1,8 @@
-import Pipes.Internal
+module
+
+public import Pipes.Internal
+
+public section
 
 namespace Proxy
 
@@ -209,17 +213,3 @@ notation:60 f " ~<< " x => x >>~ f
 notation:60 x " <<+ " f => f +>> x
 
 end Proxy
-
--- Type aliases
-abbrev Effect      := Proxy PEmpty PUnit PUnit PEmpty
-abbrev Producer b  := Proxy PEmpty PUnit PUnit b
-abbrev Pipe a b    := Proxy PUnit a PUnit b -- downstream input -> downstream output
-abbrev Consumer a  := Proxy PUnit a PUnit PEmpty
-abbrev Client a' a := Proxy a' a PUnit PEmpty
-abbrev Server b' b := Proxy PEmpty PUnit b' b
-
-abbrev Effect_        m r := forall {a' a b' b}, Proxy a'   a b'   b m r
-abbrev Producer_ b    m r := forall {a' a},      Proxy a'   a PUnit b m r
-abbrev Consumer_ a    m r := forall {b' b},      Proxy PUnit a b'   b m r
-abbrev Server_   b' b m r := forall {a' a},      Proxy a'   a b'   b m r
-abbrev Client_   a' a m r := forall {b' b},      Proxy a'   a b'   b m r

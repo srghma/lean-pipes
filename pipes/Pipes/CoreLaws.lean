@@ -1,5 +1,9 @@
 import Pipes.Core
 
+/- module -/
+/- public import all Pipes.Internal -/
+/- public import all Pipes.Core -/
+
 namespace PipesLawsCore
 
 namespace ForLaws
@@ -96,7 +100,7 @@ theorem requestDistrib
   (h : b' → Proxy a' a y' y m b) :
   h \>\ (f >=> g) = (h \>\ f) >=> (h \>\ g) := by
   funext x
-  simp_all [(· >=> ·), Bind.bind]
+  simp_all [Bind.kleisliRight, Bind.bind]
   induction f x with
   | Pure a' => rfl
   | Respond b k ih => simp_all

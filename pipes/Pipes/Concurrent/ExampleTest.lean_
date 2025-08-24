@@ -1,0 +1,237 @@
+/-
+Simple test for Pipes.Concurrent functionality
+Run this to verify the basic mailbox operations work
+-/
+import Init.System.IO
+import Std.Internal.Async.Basic
+
+-- Simplified version for testing basic concepts
+namespace PipesConcurrentTest
+
+-- Basic Input/Output types
+structure Input (α : Type) where
+  recv : BaseIO (Option α)
+
+structure Output (α : Type) where
+  send : α → BaseIO Bool
+
+-- Simple unbounded mailbox implementation using Promise
+def createSimpleMailbox (α : Type) : BaseIO (Output α × Input α) := do
+  let queue ← IO.mkRef ([] : List α)
+  let sealed ← IO.mkRef false
+  let waitingReaders ← IO.mkRef ([] : List (IO.Promise (Option α)))
+
+  let output : Output α := {
+    send := fun value => do
+      let isSealed ← sealed.get
+      if isSealed then
+        return false
+      else do
+        -- Add to queue and notify any waiting readers
+        queue.modify (· ++ [value])
+        let readers ← waitingReaders.get
+        match readers with
+        | [] => pure ()  -- No one waiting
+        | promise :: rest => do
+          waitingReaders.set rest
+          promise.resolve (some value)
+        return true
+  }
+
+  let input : Input α := {
+    recv := do
+      let isSealed ← sealed.get
+      let currentQueue ← queue.get
+
+      match currentQueue with
+      | [] =>
+        if isSealed then
+          return none
+        else do
+          -- Wait for data
+          let promise ← IO.Promise.new
+          waitingReaders.modify (· ++ [promise])
+          promise.result!.get
+      | value :: rest => do
+        queue.set rest
+        return some value
+  }
+
+  return (output, input)
+
+-- Test 1: Basic send/receive
+def test1 : IO Unit := do
+  IO.println "Test 1: Basic send/receive"
+  let (output, input) ← createSimpleMailbox String
+
+  -- Send a message
+  let success ← output.send "Hello World"
+  IO.println s!"Send success: {success}"
+
+  -- Receive the message
+  match ← input.recv with
+  | none => IO.println "No message received"
+  | some msg => IO.println s!"Received: {msg}"
+
+  IO.println ""
+
+-- Test 2: Producer/Consumer with async
+def test2 : IO Unit := do
+  IO.println "Test 2: Producer/Consumer"
+  let (output, input) ← createSimpleMailbox Nat
+
+  -- Producer task
+  let producer ← IO.asTask do
+    for i in List.range 5 do
+      let success ← output.send i
+      IO.println s!"Produced: {i} (success: {success})"
+      IO.sleep 500
+    IO.println "Producer finished"
+
+  -- Consumer task
+  let consumer ← IO.asTask do
+    let rec loop : IO Unit := do
+      match ← input.recv with
+      | none =>
+        IO.println "Consumer: No more data"
+        return ()
+      | some value => do
+        IO.println s!"Consumed: {value}"
+        loop
+    loop
+
+  -- Wait for both to complete
+  let _ ← IO.wait producer
+  let _ ← IO.wait consumer
+
+  IO.println ""
+
+-- Test 3: Multiple producers, single consumer
+def test3 : IO Unit := do
+  IO.println "Test 3: Multiple producers, single consumer"
+  let (output, input) ← createSimpleMailbox String
+
+  -- Producer 1
+  let producer1 ← IO.asTask do
+    for i in List.range 3 do
+      let success ← output.send s!"P1-{i}"
+      IO.println s!"Producer1 sent: P1-{i}"
+      IO.sleep 300
+
+  -- Producer 2
+  let producer2 ← IO.asTask do
+    for i in List.range 3 do
+      let success ← output.send s!"P2-{i}"
+      IO.println s!"Producer2 sent: P2-{i}"
+      IO.sleep 400
+
+  -- Consumer
+  let consumer ← IO.asTask do
+    for _ in List.range 6 do  -- Expect 6 messages total
+      match ← input.recv with
+      | none => IO.println "Unexpected end of stream"
+      | some msg => IO.println s!"Consumer received: {msg}"
+
+  -- Wait for all tasks
+  let _ ← IO.wait producer1
+  let _ ← IO.wait producer2
+  let _ ← IO.wait consumer
+
+  IO.println ""
+
+-- Test 4: Broadcast (manual implementation)
+def test4 : IO Unit := do
+  IO.println "Test 4: Simple broadcast"
+  let (output1, input1) ← createSimpleMailbox String
+  let (output2, input2) ← createSimpleMailbox String
+
+  -- Broadcast function
+  let broadcast (msg : String) : IO Bool := do
+    let success1 ← output1.send msg
+    let success2 ← output2.send msg
+    return (success1 && success2)
+
+  -- Consumer 1
+  let consumer1 ← IO.asTask do
+    for _ in List.range 3 do
+      match ← input1.recv with
+      | none => return ()
+      | some msg => IO.println s!"Consumer1: {msg}"
+
+  -- Consumer 2
+  let consumer2 ← IO.asTask do
+    for _ in List.range 3 do
+      match ← input2.recv with
+      | none => return ()
+      | some msg => IO.println s!"Consumer2: {msg}"
+
+  -- Broadcast messages
+  let messages := ["Hello", "World", "Broadcast"]
+  for msg in messages do
+    let success ← broadcast msg
+    IO.println s!"Broadcasted: {msg} (success: {success})"
+    IO.sleep 200
+
+  let _ ← IO.wait consumer1
+  let _ ← IO.wait consumer2
+
+  IO.println ""
+
+-- Simple interactive test
+def interactiveTest : IO Unit := do
+  IO.println "Test 5: Interactive test (type 'quit' to exit)"
+  let (output, input) ← createSimpleMailbox String
+
+  -- Consumer task
+  let consumer ← IO.asTask do
+    let rec loop : IO Unit := do
+      match ← input.recv with
+      | none => return ()
+      | some msg =>
+        if msg == "quit" then
+          IO.println "Consumer: Received quit signal"
+          return ()
+        else do
+          IO.println s!"Echo: {msg}"
+          loop
+    loop
+
+  -- Producer (interactive)
+  let rec inputLoop : IO Unit := do
+    IO.print "Enter message: "
+    let line ← (← IO.getStdin).getLine
+    let msg := line.trim
+    let success ← output.send msg
+    if msg != "quit" && success then
+      inputLoop
+    else
+      IO.println "Input loop ended"
+
+  -- Run producer and wait for consumer
+  inputLoop
+  let _ ← IO.wait consumer
+
+  IO.println ""
+
+-- Main test runner
+def main : IO Unit := do
+  IO.println "🧪 Pipes.Concurrent Simple Tests\n"
+
+  test1
+  IO.sleep 500
+
+  test2
+  IO.sleep 500
+
+  test3
+  IO.sleep 500
+
+  test4
+  IO.sleep 500
+
+  -- Uncomment for interactive test
+  -- interactiveTest
+
+  IO.println "✅ All tests completed!"
+
+end PipesConcurrentTest

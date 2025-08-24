@@ -1,3 +1,5 @@
+module
+public section
 /-
 - a' is the type of values flowing upstream (input)
 - a  is the type of values flowing downstream (input)
@@ -73,9 +75,7 @@ instance [Inhabited r] : Inhabited (Proxy a' a b' b m r) where
 
 namespace Proxy
 
--- Fundamental code to operate with Proxy
 def foldProxy
-  {s : Type v}
   (ka : a' → (a → s) → s)
   (kb : b → (b' → s) → s)
   (km : ∀ {x : Type u}, m x → (x → s) → s)
@@ -88,28 +88,28 @@ def foldProxy
   | .Pure xr => kp xr
   termination_by structural proxy
 
+end Proxy
+
 -- This is equivalent to [foldProxy Request Respond (fun _ => M)], but using
 -- that definition makes some proofs harder.
 -- NOTE: in coq diff order of args
-@[inline, simp] def bind
+@[inline, simp, specialize] def Proxy.bind
   (p0 : Proxy a' a b' b m c)
   (f : c → Proxy a' a b' b m d) :
   Proxy a' a b' b m d :=
   match p0 with
-  | .Request xa' k => .Request xa' (fun a => (k a).bind f)
-  | .Respond xb k => .Respond xb (fun b' => (k b').bind f)
-  | .M mx k => .M mx (fun x => (k x).bind f)
+  | .Request xa' k => .Request xa' (fun a => bind (k a) f)
+  | .Respond xb k => .Respond xb (fun b' => bind (k b') f)
+  | .M mx k => .M mx (fun x => bind (k x) f)
   | .Pure xc => f xc
 
-@[inline] private abbrev map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
-  Proxy.bind p (fun val => Proxy.Pure (f val))
+@[inline, specialize] abbrev Proxy.map (f : r → s) (p : Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+  bind p (fun val => Proxy.Pure (f val))
 
-@[inline] private abbrev seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
-  Proxy.bind pf (Proxy.map · (px ()))
+@[inline, specialize] abbrev Proxy.seq (pf : Proxy a' a b' b m (r → s)) (px : PUnit → Proxy a' a b' b m r) : Proxy a' a b' b m s :=
+  bind pf (map · (px ()))
 
-@[inline] def monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure
-
-end Proxy
+@[inline, specialize] abbrev Proxy.monadLift (mx : m r) : Proxy a' a b' b m r := Proxy.M mx Proxy.Pure
 
 instance : Functor (Proxy a' a b' b m) := { map := Proxy.map }
 instance : Pure (Proxy a' a b' b m) := ⟨Proxy.Pure⟩
@@ -132,20 +132,34 @@ instance : LawfulMonad (Proxy a' a b' b m) := LawfulMonad.mk'
   (id_map := by
     intro α x
     induction x with
-    | Request a' k ih => simp [Functor.map, Proxy.bind]; funext a; exact ih a
-    | Respond b k ih => simp [Functor.map, Proxy.bind]; funext b'; exact ih b'
-    | M mx k ih => simp [Functor.map, Proxy.bind]; funext x; exact ih x
+    | Request a' k ih => simp [Functor.map]; funext a; exact ih a
+    | Respond b k ih => simp [Functor.map]; funext b'; exact ih b'
+    | M mx k ih => simp [Functor.map]; funext x; exact ih x
     | Pure r => rfl
   )
   (pure_bind := by intro α β x f; rfl)
   (bind_assoc := by
     intro α β γ x f g
     induction x with
-    | Request a' k ih => simp [Bind.bind, Proxy.bind]; funext a; exact ih a;
-    | Respond b k ih => simp [Bind.bind, Proxy.bind]; funext b'; exact ih b';
-    | M mx k ih => simp [Bind.bind, Proxy.bind]; funext x; exact ih x;
+    | Request a' k ih => simp [Bind.bind]; funext a; exact ih a;
+    | Respond b k ih => simp [Bind.bind]; funext b'; exact ih b';
+    | M mx k ih => simp [Bind.bind]; funext x; exact ih x;
     | Pure r => rfl
   )
 
 instance : LawfulApplicative (Proxy a' a b' b m) := inferInstance
 instance : LawfulFunctor (Proxy a' a b' b m) := inferInstance
+
+-- Type aliases
+abbrev Effect      := Proxy PEmpty PUnit PUnit PEmpty
+abbrev Producer b  := Proxy PEmpty PUnit PUnit b
+abbrev Pipe a b    := Proxy PUnit a PUnit b -- downstream input -> downstream output
+abbrev Consumer a  := Proxy PUnit a PUnit PEmpty
+abbrev Client a' a := Proxy a' a PUnit PEmpty
+abbrev Server b' b := Proxy PEmpty PUnit b' b
+
+abbrev Effect_        m r := forall {a' a b' b}, Proxy a'   a b'   b m r
+abbrev Producer_ b    m r := forall {a' a},      Proxy a'   a PUnit b m r
+abbrev Consumer_ a    m r := forall {b' b},      Proxy PUnit a b'   b m r
+abbrev Server_   b' b m r := forall {a' a},      Proxy a'   a b'   b m r
+abbrev Client_   a' a m r := forall {b' b},      Proxy a'   a b'   b m r

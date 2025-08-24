@@ -2,7 +2,6 @@
 -- Import modules here that should be built as part of the library.
 import Pipes.Core
 import Pipes.Internal
-import Pipes.CoreLaws
 
 -- import Canonical
 -- import Aesop
@@ -219,7 +218,6 @@ def Fueled.concat (d : r) (fuel : Nat) : Pipe (List a) a m r :=
   forP (Proxy.Fueled.cat d fuel) (·.forM Proxy.respond)
 
 private def Fueled.findIndices.go
-  {a r : Type 0}
   (p : a → Bool) (d : r) (fuel i : Nat) : Pipe a Nat m r :=
   if fuel == 0 then
     Pure d
@@ -238,7 +236,7 @@ private def Fueled.findIndices.go
 def Fueled.findIndices (p : a → Bool) (d : r) (fuel : Nat) : Pipe a Nat m r := Proxy.Fueled.findIndices.go p d fuel 0
 
 private partial def Unbounded.findIndices.go
-  {a : Type 0} [Inhabited r]
+  [Inhabited r]
   (p : a → Bool) : Nat → Pipe a Nat m r
   | i =>
       Request PUnit.unit fun a =>
@@ -365,7 +363,6 @@ partial def Unbounded.chain
         Proxy.Unbounded.chain f
 
 def fold
-  {b acc result : Type u}
   [Monad m]
   (step : acc → b → acc)
   (done : acc → result)
@@ -380,7 +377,6 @@ def fold
       fold step done acc' (fu .unit)
 
 def fold'
-  {b acc result : Type u}
   [Monad m]
   (step : acc → b → acc)
   (done : acc → result)
@@ -394,8 +390,6 @@ def fold'
       fold' step done acc' (fu .unit)
 
 def foldM
-  {b acc res : Type u}
-  {m : Type u → Type u}
   [Monad m]
   (step : acc → b → m acc)
   (begin_m_x : m acc)
@@ -410,8 +404,6 @@ def foldM
   go p0 begin_m_x
 
 def foldM'
-  {b acc res r : Type u}
-  {m : Type u → Type u}
   [Monad m]
   (step : acc → b → m acc)
   (begin_m_x : m acc)
@@ -426,7 +418,6 @@ def foldM'
   go p0 begin_m_x
 
 def null
-  {b : Type 0} -- BC of Bool
   [Monad m]
   (p : Producer b m PUnit) : m Bool :=
   match p with
@@ -436,7 +427,6 @@ def null
   | Respond _ _ => pure false
 
 def all
-  {b : Type 0}
   [Monad m]
   (p : b → Bool) (p0 : Producer b m PUnit) : m Bool :=
   match p0 with
@@ -448,7 +438,6 @@ def all
       else pure false
 
 def any
-  {b : Type 0}
   [Monad m]
   (p : b → Bool) (p0 : Producer b m PUnit) : m Bool :=
   match p0 with
@@ -464,9 +453,29 @@ def or [Monad m] : Producer Bool m PUnit -> m Bool := any id
 def elem [Monad m] [BEq b] (b_val : b) : Producer b m PUnit -> m Bool := any (· == b_val)
 def notElem [Monad m] [BEq b] (b_val : b) : Producer b m PUnit -> m Bool := any (Bool.not ∘ (· == b_val))
 
+-- ForIn instance for Producer
+def Producer.forIn [Monad m]
+    (producer : Producer α m PUnit)
+    (init : β)
+    (f : α → β → m (ForInStep β)) : m β :=
+  let rec loop (p : Producer α m PUnit) (acc : β) : m β :=
+    match p with
+    | .Request v _ => PEmpty.elim v  -- Producers don't request
+    | .Pure _ => pure acc           -- End of producer
+    | .M mx k => do                 -- Monadic effect
+      let x ← mx
+      loop (k x) acc
+    | .Respond a cont => do         -- Producer yields value a
+      match ← f a acc with
+      | .done acc' => pure acc'     -- Early termination
+      | .yield acc' => loop (cont PUnit.unit) acc'  -- Continue with updated accumulator
+  loop producer init
+
+-- Make Producer an instance of ForIn
+instance [Monad m] : ForIn m (Producer α m PUnit) α where
+  forIn := Producer.forIn
+
 def head
-  {b : Type u}
-  {m : Type u → Type u}
   [Monad m]
   (p : Producer b m PUnit) : m (Option b) :=
 match p with
@@ -476,37 +485,31 @@ match p with
 | Respond a _fu => pure (some a)
 
 def Fueled.find
-  {a : Type u} {m : Type u → Type u}
   [Monad m]
   (p : a → Bool) (fuel : Nat) (prod : Producer a m PUnit) : m (Option a) :=
   Proxy.head (prod >-> Proxy.Fueled.filter PUnit.unit p fuel)
 
 def Unbounded.find
-  {a : Type u} {m : Type u → Type u}
   [Monad m] [Inhabited r]
   (p : a → Bool) (prod : Producer a m PUnit) : m (Option a) :=
   Proxy.head (prod >-> Proxy.Unbounded.filter p)
 
 def Fueled.findIndex
-  {a : Type 0}
   [Monad m]
   (p : a → Bool) (fuel : Nat) (prod : Producer a m PUnit) : m (Option Nat) :=
   Proxy.head (prod >-> Proxy.Fueled.findIndices p .unit fuel)
 
 def Unbounded.findIndex
-  {a : Type 0}
   [Monad m] [Inhabited r]
   (p : a → Bool) (prod : Producer a m PUnit) : m (Option Nat) :=
   Proxy.head (prod >-> Proxy.Unbounded.findIndices p)
 
 def Fueled.index
-  {a : Type 0}
   [Monad m]
   (n : Nat) (fuel : Nat) (prod : Producer a m PUnit) : m (Option a) :=
   Proxy.head (prod >-> Proxy.Fueled.drop fuel PUnit.unit n)
 
 def Unbounded.index
-  {a : Type 0}
   [Monad m]
   (n : Nat) (prod : Producer a m PUnit) : m (Option a) :=
   Proxy.head (prod >-> Proxy.Unbounded.drop n)

@@ -1,3 +1,5 @@
+module
+import Pipes.Internal
 import Pipes.Core
 
 namespace Pipes.Debug

@@ -2,6 +2,7 @@ name = "Pipes"
 version = "0.1.0"
 keywords = ["pipes"]
 defaultTargets = ["Pipes"]
+leanOptions = { experimental.module = true }
 
 [[lean_lib]]
 name = "Pipes"
