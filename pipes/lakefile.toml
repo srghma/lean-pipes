@@ -8,10 +8,10 @@ leanOptions = { experimental.module = true }
 name = "Pipes"
 buildType = "relWithDebInfo"
 
-# [[require]]
-# name = "aesop"
-# scope = "leanprover-community"
-# git = "https://github.com/leanprover-community/aesop"
+[[require]]
+name = "aesop"
+scope = "leanprover-community"
+git = "https://github.com/leanprover-community/aesop"
 #
 # [[require]]
 # name = "Canonical"
