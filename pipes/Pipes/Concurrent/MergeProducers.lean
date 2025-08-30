@@ -182,47 +182,56 @@ instance : ToString MergeError where
           let entries := errs.map (fun (idx, e) => s!"producer {idx}: {e}")
           s!"[mergeProducers] Multiple producers failed while closing/sending: {String.intercalate "; " entries.toList}"
 
+instance : MonadLift (EIO MergeError) IO where
+  monadLift x := EIO.toIO (.userError <| toString ·) x
+
+def mergeProducers.loopTaskM
+  (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat)) :
+  BaseIO (Except MergeError (Option o × Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat))) := do
+  let selectables := chsAndTasks.map fun (ch, _, prodIdx) =>
+    Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) =>
+      return Std.Internal.IO.Async.AsyncTask.pure (data, prodIdx)
+  match Std.Internal.IO.Async.Selectable.one selectables () with
+    | .error ioError _ => return .error (MergeError.selectOneError ioError)
+    | .ok attTask _ => do
+      let att ← IO.wait attTask
+      match att with
+      | .error ioError => return Except.error (MergeError.waitSelectOneTask ioError)
+      | .ok (data, prodIdxToFilterIfNone) =>
+        let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i == prodIdxToFilterIfNone
+        let a2 ← a1.mapM fun (ch, t, prodIdx) => return (ch, t, prodIdx, ← IO.getTaskState t)
+        let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
+        let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _taskState) => do
+          match Std.CloseableChannel.close ch () with
+            | .error e _ => return .some (prodIdx, e)
+            | .ok .unit _ =>
+              match ← IO.wait t with
+                | .error e => return .some (prodIdx, e)
+                | .ok .unit => return .none
+        if h : a_f_e = #[] then
+          return .ok $ (data, a_unf.map fun (ch, t, prodIdx, _taskState) => (ch, t, prodIdx))
+        else
+          return Except.error (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed a_f_e h)
+
 private partial def mergeProducers.loopTask
   (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat))
-  : Producer o BaseIO (Except MergeError Unit) :=
+  : Producer o (EIO MergeError) Unit :=
     if chsAndTasks.isEmpty then
-      Proxy.Pure (.ok .unit)
+      Proxy.Pure .unit
     else
       Proxy.M (do
-        let selectables := chsAndTasks.map fun (ch, _, prodIdx) => Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) => return Std.Internal.IO.Async.AsyncTask.pure (data, prodIdx)
-        match Std.Internal.IO.Async.Selectable.one selectables () with
-          | .error ioError _ => return .error (MergeError.selectOneError ioError)
-          | .ok attTask _ => do
-            let att ← IO.wait attTask
-            match att with
-            | .error ioError => return Except.error (MergeError.waitSelectOneTask ioError)
-            | .ok (data, prodIdxToFilterIfNone) =>
-              let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i == prodIdxToFilterIfNone
-              let a2 ← a1.mapM fun (ch, t, prodIdx) => return (ch, t, prodIdx, ← IO.getTaskState t)
-              let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
-              let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _taskState) => do
-                match Std.CloseableChannel.close ch () with
-                  | .error e _ => return .some (prodIdx, e)
-                  | .ok .unit _ =>
-                    match ← IO.wait t with
-                      | .error e => return .some (prodIdx, e)
-                      | .ok .unit => return .none
-              if h : a_f_e = #[] then
-                return .ok $ (data, a_unf.map fun (ch, t, prodIdx, _taskState) => (ch, t, prodIdx))
-              else
-                return Except.error (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed a_f_e h)
-      ) fun (result : Except MergeError (_ × Array (_ × _ × _))) =>
-        match result with
-        | .error e => Proxy.Pure (.error e)
-        | .ok (data, chsAndTAndProdIdx) =>
-          match data with
-          | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
-          | .none       => mergeProducers.loopTask chsAndTAndProdIdx
+        match ← mergeProducers.loopTaskM chsAndTasks with
+        | .error e => throw e
+        | .ok x => return x
+      ) fun ((data, chsAndTAndProdIdx) : (_ × Array (_ × _ × _))) =>
+        match data with
+        | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
+        | .none       => mergeProducers.loopTask chsAndTAndProdIdx
 
 -- TODO: allow to close producer
-def mergeProducers (producers : Array (Producer o BaseIO PUnit)) : Producer o BaseIO (Except MergeError Unit) :=
+def mergeProducers (producers : Array (Producer o BaseIO PUnit)) : Producer o (EIO MergeError) Unit :=
   if producers.isEmpty then
-    Proxy.Pure (.ok .unit)
+    Proxy.Pure .unit
   else
     Proxy.M (do
       let chsAndTasks ← producers.mapIdxM fun prodIdx prod => do

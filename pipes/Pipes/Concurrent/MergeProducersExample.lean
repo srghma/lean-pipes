@@ -18,7 +18,7 @@ def testProducer3 : Producer Nat BaseIO PUnit := do
   Proxy.yield 33
 
 -- Test the mergeProducers function
-def testMergeProducers : BaseIO (Except MergeError Unit × List Nat) := do
+def testMergeProducers : EIO MergeError (Unit × List Nat) := do
   let merged := mergeProducers #[testProducer1, testProducer2, testProducer3]
   Proxy.toListM merged
 
@@ -70,41 +70,37 @@ def testChannelToProducer : EIO Std.CloseableChannel.Error (List Nat) := do
   return x
 
 -- Integration test for the full mergeProducers pipeline
-def testMergeProducersIntegration : BaseIO (Except MergeError Unit × List Nat) := do
+def testMergeProducersIntegration : EIO MergeError (List Nat) := do
   -- Create some simple producers
   let producers : Array (Producer Nat BaseIO PUnit) := #[
     do Proxy.yield 1; Proxy.yield 11,
     do Proxy.yield 2; Proxy.yield 22,
     do Proxy.yield 3; Proxy.yield 33
   ]
-
-  -- Use mergeProducers to combine them
-  let merged := mergeProducers producers
-
-  -- Collect all results
-  Proxy.toListM merged
+  let (.unit, x) ← monadLift $ Proxy.toListM $ mergeProducers producers
+  return x
 
 -- Test runners
-#eval do
+#eval do -- [1, 2, 3]
   let result ← monadLift testRunProducerToChannel
   IO.println s!"testRunProducerToChannel: {result}"
 
-#eval do
+#eval do -- [1, 2, 3]
   let result ← monadLift testChannelToProducer
   IO.println s!"testChannelToProducer: {result}"
 
-#eval do
+#eval do -- [1]
   let result ← monadLift testMergeProducersIntegration
   IO.println s!"testMergeProducersIntegration: {result}"
 
 -- Performance/stress test with more producers
-def testMergeProducersStress : EIO Std.CloseableChannel.Error (Except MergeError Unit × List Nat) := do
+def testMergeProducersStress : EIO MergeError (List Nat) := do
   let producers := Array.range 10 |>.map fun i =>
     (do Proxy.yield i; Proxy.yield (i + 100) : Producer Nat BaseIO PUnit)
 
-  let merged := mergeProducers producers
-  monadLift $ Proxy.toListM merged
+  let (.unit, x) ← monadLift $ Proxy.toListM $ mergeProducers producers
+  return x
 
-#eval do
+#eval do -- [0, 7]
   let result ← monadLift testMergeProducersStress
   IO.println s!"testMergeProducersStress: {result}"
