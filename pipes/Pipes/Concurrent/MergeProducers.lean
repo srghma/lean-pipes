@@ -151,12 +151,20 @@ partial def Producer.Unbounded.fromCloseableChannels (chs : Array (Std.Closeable
 attribute [-instance] Std.CloseableChannel.instMonadLiftEIOErrorIO
 
 -- I just send, I dont close channel if I'm cancelled (which will never happen actually but anyway), I can only fail if channel was closed but I tried to send value (which should not happen really)
-def runProducerToChannel (p : Producer o BaseIO PUnit) (ch : Std.CloseableChannel o) : EIO Std.CloseableChannel.Error Unit :=
+def runProducerToChannel [ToString o] (p : Producer o BaseIO PUnit) (ch : Std.CloseableChannel o) : EIO Std.CloseableChannel.Error Unit :=
   match p with
   | .Request v _ => PEmpty.elim v
   | .Pure _ => return .unit
   | .M mx k => unlessImACanceledDo do runProducerToChannel (k (← mx)) ch
   | .Respond a cont => unlessImACanceledDo do
+    dbg_trace s!"[send] sending {a}"
+    match ← IO.wait (← Std.CloseableChannel.send ch a) with
+    | Except.ok .unit =>
+        dbg_trace s!"[send] ok {a}"
+        runProducerToChannel (cont ()) ch
+    | Except.error e =>
+        dbg_trace s!"[send] error {a}: {e}"
+        throw e
     match ← IO.wait (← Std.CloseableChannel.send ch a) with
     | Except.ok .unit  => runProducerToChannel (cont ()) ch
     | Except.error e => throw e
@@ -194,6 +202,7 @@ def mergeProducers.filterMapper
   (t : Task (Except Std.CloseableChannel.Error Unit))
   (prodIdx : Nat) :
   BaseIO (Option (Nat × Std.CloseableChannel.Error)) := do
+  dbg_trace "doing {prodIdx}";
   match <- Std.CloseableChannel.close ch |>.toBaseIO with
     | .error e => return .some (prodIdx, e)
     | .ok .unit => do
@@ -201,41 +210,53 @@ def mergeProducers.filterMapper
         | .error e => return .some (prodIdx, e)
         | .ok .unit => return .none
 
-def mergeProducers.loopTaskM
+def mergeProducers.loopTaskM [ToString o]
   (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat)) :
   EIO MergeError (Option o × Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat)) := do
   let selectables := chsAndTasks.map fun (ch, _, prodIdx) =>
     Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) =>
       return Std.Internal.IO.Async.AsyncTask.pure (data, prodIdx)
   -- throw (MergeError.selectOneError .unexpectedEof)
+  dbg_trace s!"[loop] waiting on {chsAndTasks.size} channels"
   let attTask <- Std.Internal.IO.Async.Selectable.one selectables |>.toEIO MergeError.selectOneError
   let att ← IO.wait attTask
+  dbg_trace s!"[loop] got att = {att}"
   let (data, prodIdxToFilterIfNone) ← EIO.ofExcept (att.mapError MergeError.waitSelectOneTask)
+  dbg_trace s!"[loop] received data = {data}, prodIdx = {prodIdxToFilterIfNone}"
   let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i ≠ prodIdxToFilterIfNone
-  let a2 ← a1.mapM fun (ch, t, prodIdx) => return (ch, t, prodIdx, ← IO.getTaskState t)
+  let a2 ← a1.mapM fun (ch, t, prodIdx) => do
+    let ts ← IO.getTaskState t
+    dbg_trace s!"[loop] task {prodIdx} state = {ts}"
+    return (ch, t, prodIdx, ts)
   let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
-  let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _taskState) => mergeProducers.filterMapper ch t prodIdx
+  dbg_trace s!"[loop] finished={a_f.size}, unfinished={a_unf.size}"
+  let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _) => do
+    let r ← mergeProducers.filterMapper ch t prodIdx
+    dbg_trace s!"[loop] filterMapper {prodIdx} => {r}"
+    return r
   if h : a_f_e = #[] then
     return (data, a_unf.map fun (ch, t, prodIdx, _taskState) => (ch, t, prodIdx))
   else
     throw (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed a_f_e h)
 
-private partial def mergeProducers.loopTask
+private partial def mergeProducers.loopTask [ToString o]
   (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat))
   : Producer o (EIO MergeError) Unit :=
     if chsAndTasks.isEmpty then
       Proxy.Pure .unit
     else
       Proxy.M (mergeProducers.loopTaskM chsAndTasks) fun ((data, chsAndTAndProdIdx) : (_ × Array (_ × _ × _))) =>
+        dbg_trace s!"[loopTask] got data={data}"
         match data with
         | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
         | .none       => mergeProducers.loopTask chsAndTAndProdIdx
 
-def mergeProducers (producers : Array (Producer o BaseIO PUnit)) : Producer o (EIO MergeError) Unit :=
+def mergeProducers [ToString o] (producers : Array (Producer o BaseIO PUnit)) : Producer o (EIO MergeError) Unit :=
   if producers.isEmpty then
     Proxy.Pure .unit
   else
     Proxy.M ( do
+      dbg_trace "[mergeProducers] starting";
       let chsAndTasks ← producers.mapIdxM fun prodIdx prod => do
         let ch ← Std.CloseableChannel.new
         let t ← EIO.asTask (runProducerToChannel prod ch) -- unwraps a producer like an onion, when nothing - just returns
