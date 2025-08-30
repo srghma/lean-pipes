@@ -55,21 +55,20 @@ def testMergeProducersIntegration : EIO MergeError (List Nat) := do
   ]
   (·.2) <$> (monadLift $ Proxy.toListM $ mergeProducers producers)
 
-#eval do -- [1] or [2,3] or [1,3] or [2, 3, 33, 1]
-  let result ← monadLift testMergeProducersIntegration
-  IO.println s!"testMergeProducersIntegration: {result}"
+/-- info: #[1, 2, 3, 11, 22, 33] -/
+#guard_msgs in #eval return (← testMergeProducersIntegration).toArray.qsort
 
 -- Performance/stress test with more producers
 def testMergeProducersStress : EIO MergeError (List Nat) := do
   let producers := Array.range 10 |>.map fun i =>
     (do
-      dbg_trace s!"[producer {i}] yielding {i}"
+      -- dbg_trace s!"[producer {i}] yielding {i}"
       Proxy.yield i
-      dbg_trace s!"[producer {i}] yielding {i+100}"
+      -- dbg_trace s!"[producer {i}] yielding {i+100}"
       (Proxy.yield (i + 100) : Producer Nat BaseIO PUnit)
-      dbg_trace s!"[producer {i}] yielding finish")
+      -- dbg_trace s!"[producer {i}] yielding finish"
+      )
   (·.2) <$> (monadLift $ Proxy.toListM $ mergeProducers producers)
 
-#eval do -- [0, 7] or [1, 9] or [8] or [0, 3] --
-  let result ← monadLift testMergeProducersStress
-  IO.println s!"testMergeProducersStress: {result}"
+/-- info: #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109] -/
+#guard_msgs in #eval return (← testMergeProducersStress).toArray.qsort

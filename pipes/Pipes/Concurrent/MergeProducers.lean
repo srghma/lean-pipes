@@ -127,7 +127,6 @@ import Std.Sync.Channel
 import Std.Internal.Async.Basic
 import Std.Internal.Async.Select
 import Init.System.IO
-import Aesop
 
 partial def Producer.Unbounded.fromCloseableChannel [MonadLiftT BaseIO m] (ch : Std.CloseableChannel α) : Producer α m PUnit :=
   Proxy.M (monadLift ch.sync.recv) fun
@@ -151,8 +150,9 @@ partial def Producer.Unbounded.fromCloseableChannels (chs : Array (Std.Closeable
 attribute [-instance] Std.CloseableChannel.instMonadLiftEIOErrorIO
 
 /--
+I unwrap a producer like an onion.
 I just send, I dont close channel (even if my thread was canceled), user should do this,
-I can only fail in `send` if channel was closed but I tried to send value (which should not happen really)
+I can only fail in `Std.CloseableChannel.send` if channel was closed but I tried to send value (which is impossible by logic really)
 -/
 def runProducerToChannel
   -- [ToString o]
@@ -213,7 +213,7 @@ def mergeProducers.waitForFinishedTask
   (t : Task (Except Std.CloseableChannel.Error Unit))
   (prodIdx : Nat) :
   BaseIO (Option (Nat × Std.CloseableChannel.Error)) := do
-  dbg_trace "[filterMapper]   doing prodIdx {prodIdx}";
+  -- dbg_trace "[filterMapper]   doing prodIdx {prodIdx}";
   match ← IO.wait t with
     | .error e => return .some (prodIdx, e)
     | .ok .unit => return .none
@@ -227,25 +227,22 @@ def mergeProducers.loopTaskM [ToString o]
     .some $ Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) =>
       return Std.Internal.IO.Async.AsyncTask.pure (data, prodIdx)
 
-  dbg_trace s!"[loop] waiting on {chsAndTasks.size} channels"
+  -- dbg_trace s!"[loop] waiting on {chsAndTasks.size} channels"
   let attTask <- Std.Internal.IO.Async.Selectable.one selectables |>.toEIO MergeError.selectOneError
   let att ← IO.wait attTask
-  dbg_trace s!"[loop] got att = {att}"
+  -- dbg_trace s!"[loop] got att = {att}"
   let (data, prodIdxThatSentData) ← EIO.ofExcept (att.mapError MergeError.waitSelectOneTask)
-  dbg_trace s!"[loop] received data = {data}, prodIdx = {prodIdxThatSentData}"
+  -- dbg_trace s!"[loop] received data = {data}, prodIdx = {prodIdxThatSentData}"
 
-  -- Only handle the specific producer that sent data
   match data with
-  | some _value =>
-    -- Producer sent data, keep all producers
-    return (data, chsAndTasks)
+  | some _value => return (data, chsAndTasks)
   | none =>
-    -- Producer ended, remove it and close its channel
+    -- if none then channel was closed already (by parallel task, means task was consumed)
+    -- Why not to close in main thread? Before I closed in main but got into problems
     let (toClose, toKeep) := chsAndTasks.partition fun (_, _, prodIdx) => prodIdx == prodIdxThatSentData
 
-    -- Close the channel for the ended producer
     let closeErrors ← toClose.filterMapM fun (_ch, t, prodIdx) =>
-      mergeProducers.waitForFinishedTask t prodIdx
+      mergeProducers.waitForFinishedTask t prodIdx -- take out the errors from task if any
 
     if h : closeErrors = #[] then
       return (none, toKeep)
@@ -260,7 +257,7 @@ private partial def mergeProducers.loopTask
       Proxy.Pure .unit
     else
       Proxy.M (mergeProducers.loopTaskM chsAndTasks) fun ((data, chsAndTAndProdIdx) : (_ × Array (_ × _ × _))) =>
-        dbg_trace s!"[loopTask] got data={data}"
+        -- dbg_trace s!"[loopTask] got data={data}"
         match data with
         | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
         | .none       => mergeProducers.loopTask chsAndTAndProdIdx
@@ -275,14 +272,14 @@ def mergeProducers
     Proxy.Pure .unit
   else
     Proxy.M ( do
-      dbg_trace "[mergeProducers] starting";
+      -- dbg_trace "[mergeProducers] starting";
       let chsAndTasks ← producers.mapIdxM fun prodIdx prod => do
         let ch ← Std.CloseableChannel.new
         let t ← EIO.asTask (
           try
             runProducerToChannel prodIdx prod ch
           finally
-            ch.close) -- unwraps a producer like an onion, when nothing - just returns
+            ch.close)
         pure (ch, t, prodIdx)
       pure chsAndTasks
     ) mergeProducers.loopTask
