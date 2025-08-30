@@ -126,6 +126,7 @@ import Std.Sync.Mutex
 import Std.Sync.Channel
 import Std.Internal.Async.Basic
 import Std.Internal.Async.Select
+import Init.System.IO
 import Aesop
 
 partial def Producer.Unbounded.fromCloseableChannel [MonadLiftT BaseIO m] (ch : Std.CloseableChannel α) : Producer α m PUnit :=
@@ -165,7 +166,9 @@ def runProducerToChannel (p : Producer o BaseIO PUnit) (ch : Std.CloseableChanne
 inductive MergeError
   | selectOneError (err : IO.Error)
   | waitSelectOneTask (err : IO.Error)
-  | weTriedToSendToChannelOrCloseChannelAndFailed (errorAndProducerIdxs : Array (Nat × Std.CloseableChannel.Error)) (errorAndProducerIdxsNotEmpty : ¬(errorAndProducerIdxs = #[]))
+  | weTriedToSendToChannelOrCloseChannelAndFailed
+    (errorAndProducerIdxs : Array (Nat × Std.CloseableChannel.Error))
+    (errorAndProducerIdxsNotEmpty : ¬(errorAndProducerIdxs = #[]))
   deriving Inhabited
 
 instance : ToString MergeError where
@@ -174,8 +177,9 @@ instance : ToString MergeError where
         s!"[mergeProducers] Failed while selecting on channels: {err.toString}"
     | .waitSelectOneTask err =>
         s!"[mergeProducers] Failed while waiting for channel readiness: {err.toString}"
-    | .weTriedToSendToChannelOrCloseChannelAndFailed errs _ =>
+    | .weTriedToSendToChannelOrCloseChannelAndFailed errs h =>
       match errs with
+        | #[] => absurd rfl h
         | #[(idx, e)] =>
           s!"[mergeProducers] Producer {idx} failed while closing or sending to its channel: {e}"
         | _ =>
@@ -185,33 +189,36 @@ instance : ToString MergeError where
 instance : MonadLift (EIO MergeError) IO where
   monadLift x := EIO.toIO (.userError <| toString ·) x
 
+def mergeProducers.filterMapper
+  (ch : Std.CloseableChannel o)
+  (t : Task (Except Std.CloseableChannel.Error Unit))
+  (prodIdx : Nat) :
+  BaseIO (Option (Nat × Std.CloseableChannel.Error)) := do
+  match <- Std.CloseableChannel.close ch |>.toBaseIO with
+    | .error e => return .some (prodIdx, e)
+    | .ok .unit => do
+      match ← IO.wait t with
+        | .error e => return .some (prodIdx, e)
+        | .ok .unit => return .none
+
 def mergeProducers.loopTaskM
   (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat)) :
-  BaseIO (Except MergeError (Option o × Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat))) := do
+  EIO MergeError (Option o × Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat)) := do
   let selectables := chsAndTasks.map fun (ch, _, prodIdx) =>
     Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) =>
       return Std.Internal.IO.Async.AsyncTask.pure (data, prodIdx)
-  match Std.Internal.IO.Async.Selectable.one selectables () with
-    | .error ioError _ => return .error (MergeError.selectOneError ioError)
-    | .ok attTask _ => do
-      let att ← IO.wait attTask
-      match att with
-      | .error ioError => return Except.error (MergeError.waitSelectOneTask ioError)
-      | .ok (data, prodIdxToFilterIfNone) =>
-        let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i ≠ prodIdxToFilterIfNone
-        let a2 ← a1.mapM fun (ch, t, prodIdx) => return (ch, t, prodIdx, ← IO.getTaskState t)
-        let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
-        let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _taskState) => do
-          match Std.CloseableChannel.close ch () with
-            | .error e _ => return .some (prodIdx, e)
-            | .ok .unit _ =>
-              match ← IO.wait t with
-                | .error e => return .some (prodIdx, e)
-                | .ok .unit => return .none
-        if h : a_f_e = #[] then
-          return .ok $ (data, a_unf.map fun (ch, t, prodIdx, _taskState) => (ch, t, prodIdx))
-        else
-          return Except.error (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed a_f_e h)
+  -- throw (MergeError.selectOneError .unexpectedEof)
+  let attTask <- Std.Internal.IO.Async.Selectable.one selectables |>.toEIO MergeError.selectOneError
+  let att ← IO.wait attTask
+  let (data, prodIdxToFilterIfNone) ← EIO.ofExcept (att.mapError MergeError.waitSelectOneTask)
+  let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i ≠ prodIdxToFilterIfNone
+  let a2 ← a1.mapM fun (ch, t, prodIdx) => return (ch, t, prodIdx, ← IO.getTaskState t)
+  let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
+  let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _taskState) => mergeProducers.filterMapper ch t prodIdx
+  if h : a_f_e = #[] then
+    return (data, a_unf.map fun (ch, t, prodIdx, _taskState) => (ch, t, prodIdx))
+  else
+    throw (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed a_f_e h)
 
 private partial def mergeProducers.loopTask
   (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat))
@@ -219,23 +226,18 @@ private partial def mergeProducers.loopTask
     if chsAndTasks.isEmpty then
       Proxy.Pure .unit
     else
-      Proxy.M (do
-        match ← mergeProducers.loopTaskM chsAndTasks with
-        | .error e => throw e
-        | .ok x => return x
-      ) fun ((data, chsAndTAndProdIdx) : (_ × Array (_ × _ × _))) =>
+      Proxy.M (mergeProducers.loopTaskM chsAndTasks) fun ((data, chsAndTAndProdIdx) : (_ × Array (_ × _ × _))) =>
         match data with
         | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
         | .none       => mergeProducers.loopTask chsAndTAndProdIdx
 
--- TODO: allow to close producer
 def mergeProducers (producers : Array (Producer o BaseIO PUnit)) : Producer o (EIO MergeError) Unit :=
   if producers.isEmpty then
     Proxy.Pure .unit
   else
-    Proxy.M (do
+    Proxy.M ( do
       let chsAndTasks ← producers.mapIdxM fun prodIdx prod => do
-        let ch <- Std.CloseableChannel.new
+        let ch ← Std.CloseableChannel.new
         let t ← EIO.asTask (runProducerToChannel prod ch) -- unwraps a producer like an onion, when nothing - just returns
         pure (ch, t, prodIdx)
       pure chsAndTasks

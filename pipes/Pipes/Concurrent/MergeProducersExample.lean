@@ -66,8 +66,7 @@ def testChannelToProducer : EIO Std.CloseableChannel.Error (List Nat) := do
 
   -- Convert channel to producer and collect results
   let producer := (Producer.Unbounded.fromCloseableChannel ch : Producer Nat BaseIO PUnit)
-  let (.unit, x) ← monadLift $ Proxy.toListM producer
-  return x
+  (·.2) <$> (monadLift $ Proxy.toListM producer)
 
 -- Integration test for the full mergeProducers pipeline
 def testMergeProducersIntegration : EIO MergeError (List Nat) := do
@@ -77,19 +76,15 @@ def testMergeProducersIntegration : EIO MergeError (List Nat) := do
     do Proxy.yield 2; Proxy.yield 22,
     do Proxy.yield 3; Proxy.yield 33
   ]
-  let (.unit, x) ← monadLift $ Proxy.toListM $ mergeProducers producers
-  return x
+  (·.2) <$> (monadLift $ Proxy.toListM $ mergeProducers producers)
 
--- Test runners
-#eval do -- [1, 2, 3]
-  let result ← monadLift testRunProducerToChannel
-  IO.println s!"testRunProducerToChannel: {result}"
+/-- info: [1, 2, 3] -/
+#guard_msgs in #eval do IO.println (← monadLift testRunProducerToChannel)
 
-#eval do -- [1, 2, 3]
-  let result ← monadLift testChannelToProducer
-  IO.println s!"testChannelToProducer: {result}"
+/-- info: [1, 2, 3] -/
+#guard_msgs in #eval do IO.println (← monadLift testChannelToProducer)
 
-#eval do -- [1]
+#eval do -- [1] or [2,3] or [1,3] or [2, 3, 33, 1]
   let result ← monadLift testMergeProducersIntegration
   IO.println s!"testMergeProducersIntegration: {result}"
 
@@ -97,9 +92,7 @@ def testMergeProducersIntegration : EIO MergeError (List Nat) := do
 def testMergeProducersStress : EIO MergeError (List Nat) := do
   let producers := Array.range 10 |>.map fun i =>
     (do Proxy.yield i; Proxy.yield (i + 100) : Producer Nat BaseIO PUnit)
-
-  let (.unit, x) ← monadLift $ Proxy.toListM $ mergeProducers producers
-  return x
+  (·.2) <$> (monadLift $ Proxy.toListM $ mergeProducers producers)
 
 #eval do -- [0, 7] or [1, 9] or [8] or [0, 3] --
   let result ← monadLift testMergeProducersStress

@@ -61,7 +61,7 @@ partial def mergePureProducersRoundRobin (ps : List (Producer o Id PUnit)) : Pro
     Proxy.fromList [2, 22],
     Proxy.fromList [3, 33]
   ]
-) = [1, 11, 2, 22, 3, 33]
+  ) = (.unit, [1, 11, 2, 22, 3, 33])
 
 #guard Proxy.toList (
   mergePureProducersTwoPhase [
@@ -69,7 +69,7 @@ partial def mergePureProducersRoundRobin (ps : List (Producer o Id PUnit)) : Pro
     Proxy.fromList [2, 22],
     Proxy.fromList [3, 33]
   ]
-) = [1, 2, 3, 11, 22, 33]
+  ) = (.unit, [1, 2, 3, 11, 22, 33])
 
 #guard Proxy.toList (
   mergePureProducersRoundRobin [
@@ -77,4 +77,4 @@ partial def mergePureProducersRoundRobin (ps : List (Producer o Id PUnit)) : Pro
     Proxy.fromList [2, 22],
     Proxy.fromList [3, 33]
   ]
-) = [1, 2, 3, 33, 22, 11]
+  ) = (.unit, [1, 2, 3, 33, 22, 11])

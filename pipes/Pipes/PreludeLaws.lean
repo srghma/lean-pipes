@@ -21,7 +21,7 @@ theorem map_compose
         | succ n ih => simp_all [Fueled.mapPipe, connect, pullR, pullR.go]
 
 theorem toListM_each_id [Monad m] [LawfulMonad m] (xs : List a) :
-  toListM (each xs) = Pure.pure (f := m) xs := by
+  toListM (each xs) = Pure.pure (f := m) (.unit, xs) := by
   induction xs with
   | nil => simp_all [each, toListM]
   | cons x' xs' ih => simp_all [each, toListM, Bind.bind]
