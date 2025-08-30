@@ -18,8 +18,8 @@ def testProducer3 : Producer Nat BaseIO PUnit := do
   Proxy.yield 33
 
 -- Test the mergeProducers function
-def testMergeProducers : EIO Std.CloseableChannel.Error (List Nat) := do
-  let merged := mergeProducers [testProducer1, testProducer2, testProducer3]
+def testMergeProducers : BaseIO (Except MergeError Unit × List Nat) := do
+  let merged := mergeProducers #[testProducer1, testProducer2, testProducer3]
   Proxy.toListM merged
 
 -- A simpler test that doesn't require full concurrent execution
@@ -54,6 +54,7 @@ def testRunProducerToChannel : EIO Std.CloseableChannel.Error (List Nat) := do
   return results
 
 -- Test channel-to-producer conversion
+-- def testChannelToProducer : EIO Std.CloseableChannel.Error (Except MergeError Unit × List Nat) := do
 def testChannelToProducer : EIO Std.CloseableChannel.Error (List Nat) := do
   let ch ← Std.CloseableChannel.new
 
@@ -64,20 +65,21 @@ def testChannelToProducer : EIO Std.CloseableChannel.Error (List Nat) := do
   ch.close
 
   -- Convert channel to producer and collect results
-  let producer := CloseableChannel.Unbounded.toProducer ch
-  Proxy.toListM producer
+  let producer := (Producer.Unbounded.fromCloseableChannel ch : Producer Nat BaseIO PUnit)
+  let (.unit, x) ← monadLift $ Proxy.toListM producer
+  return x
 
 -- Integration test for the full mergeProducers pipeline
-def testMergeProducersIntegration : EIO Std.CloseableChannel.Error (List Nat) := do
+def testMergeProducersIntegration : BaseIO (Except MergeError Unit × List Nat) := do
   -- Create some simple producers
-  let producers : List (Producer Nat BaseIO PUnit) := [
+  let producers : Array (Producer Nat BaseIO PUnit) := #[
     do Proxy.yield 1; Proxy.yield 11,
     do Proxy.yield 2; Proxy.yield 22,
     do Proxy.yield 3; Proxy.yield 33
   ]
 
   -- Use mergeProducers to combine them
-  let merged := mergeProducers (m := EIO Std.CloseableChannel.Error) producers
+  let merged := mergeProducers producers
 
   -- Collect all results
   Proxy.toListM merged
@@ -96,12 +98,12 @@ def testMergeProducersIntegration : EIO Std.CloseableChannel.Error (List Nat) :=
   IO.println s!"testMergeProducersIntegration: {result}"
 
 -- Performance/stress test with more producers
-def testMergeProducersStress : EIO Std.CloseableChannel.Error (List Nat) := do
-  let producers := List.range 10 |>.map fun i =>
+def testMergeProducersStress : EIO Std.CloseableChannel.Error (Except MergeError Unit × List Nat) := do
+  let producers := Array.range 10 |>.map fun i =>
     (do Proxy.yield i; Proxy.yield (i + 100) : Producer Nat BaseIO PUnit)
 
-  let merged := mergeProducers (m := EIO Std.CloseableChannel.Error) producers
-  Proxy.toListM merged
+  let merged := mergeProducers producers
+  monadLift $ Proxy.toListM merged
 
 #eval do
   let result ← monadLift testMergeProducersStress

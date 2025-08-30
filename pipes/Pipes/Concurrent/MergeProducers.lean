@@ -59,35 +59,6 @@
 --   finally
 --     monadLift (ch.close)
 
-import Pipes.Internal
-import Pipes.Core
-import Pipes.Prelude
-import Std.Sync.Mutex
-import Std.Sync.Channel
-import Std.Internal.Async.Basic
-import Std.Internal.Async.Select
-
-partial def Producer.Unbounded.fromCloseableChannel [MonadLiftT BaseIO m] (ch : Std.CloseableChannel α) : Producer α m PUnit :=
-  Proxy.M (monadLift ch.sync.recv) fun
-    | some a => Proxy.Respond a (fun _ => Producer.Unbounded.fromCloseableChannel ch)
-    | none   => Proxy.Pure ()
-
--- (fun x => IO (Std.Internal.IO.Async.AsyncTask x))
-open Std.Internal.IO.Async in
-partial def Producer.Unbounded.fromCloseableChannels (chs : Array (Std.CloseableChannel α)) : Producer α (fun x => IO (AsyncTask x)) PUnit :=
-  if chs.isEmpty then
-    Proxy.Pure ()
-  else
-    Proxy.M (Selectable.one $
-      chs.mapIdx fun i ch =>
-        Selectable.case ch.recvSelector fun (data : Option α) =>
-          return AsyncTask.pure (data, if data.isSome then chs else chs.eraseIdx! i)
-    ) fun ((mvalue, chs') : Option α × Array (Std.CloseableChannel α)) =>
-      match mvalue with
-      | some value => Proxy.Respond value fun _ => fromCloseableChannels chs'
-      | none => fromCloseableChannels chs'
-
-
 -- private def selectFromChannelsTuplesTask
 --   (chsAndTasks : List (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit)))
 --   : BaseIO (Option (o × List (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit)))) := do
@@ -100,53 +71,6 @@ partial def Producer.Unbounded.fromCloseableChannels (chs : Array (Std.Closeable
 --       | some v => return some (v, acc ++ xs ++ [(ch, t)])
 --       | none   => go (acc ++ [(ch, t)]) xs
 --   go [] chsAndTasks
-
-private partial def mergeProducers.loopTask
-  [MonadFinally m] [Monad m]
-  [MonadLiftT BaseIO m]
-  [MonadLiftT (EIO Std.CloseableChannel.Error) m]
-  (chsAndTasks : List (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit)))
-  : Producer o m PUnit := sorry
---   match chsAndTasks with
---   | [] => Proxy.Pure ()
---   | _ =>
---     Proxy.M (monadLift $ selectFromChannelsTuplesTask chsAndTasks) fun
---       | some (v, rest) => Proxy.Respond v (fun _ => mergeProducers.loopTask rest)
---       | none =>
---         -- wait for all workers to finish (ignore results)
---         Proxy.M (monadLift $ do
---           let mut results : List (Except Std.CloseableChannel.Error Unit) := []
---           for (_, t) in chsAndTasks do
---             let r ← IO.wait t
---             results := results ++ [r]
---           pure results
---         ) fun _ =>
---           Proxy.Pure ()
-
-def mergeProducers.runProducerToChannel [Monad m] [MonadLiftT (EIO Std.CloseableChannel.Error) m] [MonadLiftT BaseIO m] (p : Producer o BaseIO PUnit) (ch : Std.CloseableChannel o) : m Unit :=
-  match p with
-  | .Request v _ => PEmpty.elim v
-  | .Pure _ => closeIfNotClosed ch
-  | .M mx k => unlessImACanceledTask ch do runProducerToChannel (k (← mx)) ch
-  | .Respond a cont => unlessImACanceledTask ch do ch.sync.send a; runProducerToChannel (cont ()) ch
-  where
-    closeIfNotClosed (ch : Std.CloseableChannel o): m Unit := do if ← ch.isClosed then return else ch.close
-    unlessImACanceledTask (ch : Std.CloseableChannel o) (t : m Unit) : m Unit := do if ← IO.checkCanceled then closeIfNotClosed ch else t
-
-def mergeProducers
-  [MonadFinally m] [Monad m]
-  [MonadLiftT BaseIO m]
-  [MonadLiftT (EIO Std.CloseableChannel.Error) m]
-  (producers : List (Producer o BaseIO PUnit))
-  : Producer o m PUnit :=
-  Proxy.M (do
-    let chsAndTasks ← monadLift $ do
-      producers.mapM fun (producer) => do
-        let ch <- Std.CloseableChannel.new
-        let t ← EIO.asTask (mergeProducers.runProducerToChannel producer ch) -- unwraps a producer like an onion, when nothing - stops channel, TODO: also we should remove this producer from list of producers from a next round
-        pure (ch, t)
-    pure chsAndTasks
-  ) mergeProducers.loopTask
 
 -- open Std.Internal.IO.Async in
 -- def Producer.selector (prod : Producer b BaseIO PUnit) : Selector b := {
@@ -194,3 +118,116 @@ def mergeProducers
 --     | some task => IO.cancel task
 --     | none => return ()
 -- }
+
+import Pipes.Internal
+import Pipes.Core
+import Pipes.Prelude
+import Std.Sync.Mutex
+import Std.Sync.Channel
+import Std.Internal.Async.Basic
+import Std.Internal.Async.Select
+import Aesop
+
+partial def Producer.Unbounded.fromCloseableChannel [MonadLiftT BaseIO m] (ch : Std.CloseableChannel α) : Producer α m PUnit :=
+  Proxy.M (monadLift ch.sync.recv) fun
+    | some a => Proxy.Respond a (fun _ => Producer.Unbounded.fromCloseableChannel ch)
+    | none   => Proxy.Pure ()
+
+partial def Producer.Unbounded.fromCloseableChannels (chs : Array (Std.CloseableChannel α)) : Producer α (fun x => IO (Std.Internal.IO.Async.AsyncTask x)) PUnit :=
+  if chs.isEmpty then
+    Proxy.Pure ()
+  else
+    Proxy.M (Std.Internal.IO.Async.Selectable.one $
+      chs.mapIdx fun i ch =>
+        Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option α) =>
+          return Std.Internal.IO.Async.AsyncTask.pure (data, if data.isSome then chs else chs.eraseIdx! i)
+    ) fun ((mvalue, chs') : Option α × Array (Std.CloseableChannel α)) =>
+      match mvalue with
+      | some value => Proxy.Respond value fun _ => fromCloseableChannels chs'
+      | none => fromCloseableChannels chs'
+
+
+attribute [-instance] Std.CloseableChannel.instMonadLiftEIOErrorIO
+
+-- I just send, I dont close channel if I'm cancelled (which will never happen actually but anyway), I can only fail if channel was closed but I tried to send value (which should not happen really)
+def runProducerToChannel (p : Producer o BaseIO PUnit) (ch : Std.CloseableChannel o) : EIO Std.CloseableChannel.Error Unit :=
+  match p with
+  | .Request v _ => PEmpty.elim v
+  | .Pure _ => return .unit
+  | .M mx k => unlessImACanceledDo do runProducerToChannel (k (← mx)) ch
+  | .Respond a cont => unlessImACanceledDo do
+    match ← IO.wait (← Std.CloseableChannel.send ch a) with
+    | Except.ok .unit  => runProducerToChannel (cont ()) ch
+    | Except.error e => throw e
+  where
+    unlessImACanceledDo t := do if ← IO.checkCanceled then return .unit else t
+
+inductive MergeError
+  | selectOneError (err : IO.Error)
+  | waitSelectOneTask (err : IO.Error)
+  | weTriedToSendToChannelOrCloseChannelAndFailed (errorAndProducerIdxs : Array (Nat × Std.CloseableChannel.Error)) (errorAndProducerIdxsNotEmpty : ¬(errorAndProducerIdxs = #[]))
+  deriving Inhabited
+
+instance : ToString MergeError where
+  toString
+    | .selectOneError err =>
+        s!"[mergeProducers] Failed while selecting on channels: {err.toString}"
+    | .waitSelectOneTask err =>
+        s!"[mergeProducers] Failed while waiting for channel readiness: {err.toString}"
+    | .weTriedToSendToChannelOrCloseChannelAndFailed errs _ =>
+      match errs with
+        | #[(idx, e)] =>
+          s!"[mergeProducers] Producer {idx} failed while closing or sending to its channel: {e}"
+        | _ =>
+          let entries := errs.map (fun (idx, e) => s!"producer {idx}: {e}")
+          s!"[mergeProducers] Multiple producers failed while closing/sending: {String.intercalate "; " entries.toList}"
+
+private partial def mergeProducers.loopTask
+  (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat))
+  : Producer o BaseIO (Except MergeError Unit) :=
+    if chsAndTasks.isEmpty then
+      Proxy.Pure (.ok .unit)
+    else
+      Proxy.M (do
+        let selectables := chsAndTasks.map fun (ch, _, prodIdx) => Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) => return Std.Internal.IO.Async.AsyncTask.pure (data, prodIdx)
+        match Std.Internal.IO.Async.Selectable.one selectables () with
+          | .error ioError _ => return .error (MergeError.selectOneError ioError)
+          | .ok attTask _ => do
+            let att ← IO.wait attTask
+            match att with
+            | .error ioError => return Except.error (MergeError.waitSelectOneTask ioError)
+            | .ok (data, prodIdxToFilterIfNone) =>
+              let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i == prodIdxToFilterIfNone
+              let a2 ← a1.mapM fun (ch, t, prodIdx) => return (ch, t, prodIdx, ← IO.getTaskState t)
+              let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
+              let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _taskState) => do
+                match Std.CloseableChannel.close ch () with
+                  | .error e _ => return .some (prodIdx, e)
+                  | .ok .unit _ =>
+                    match ← IO.wait t with
+                      | .error e => return .some (prodIdx, e)
+                      | .ok .unit => return .none
+              if h : a_f_e = #[] then
+                return .ok $ (data, a_unf.map fun (ch, t, prodIdx, _taskState) => (ch, t, prodIdx))
+              else
+                return Except.error (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed a_f_e h)
+      ) fun (result : Except MergeError (_ × Array (_ × _ × _))) =>
+        match result with
+        | .error e => Proxy.Pure (.error e)
+        | .ok (data, chsAndTAndProdIdx) =>
+          match data with
+          | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
+          | .none       => mergeProducers.loopTask chsAndTAndProdIdx
+
+-- TODO: allow to close producer
+def mergeProducers (producers : Array (Producer o BaseIO PUnit)) : Producer o BaseIO (Except MergeError Unit) :=
+  if producers.isEmpty then
+    Proxy.Pure (.ok .unit)
+  else
+    Proxy.M (do
+      let chsAndTasks ← producers.mapIdxM fun prodIdx prod => do
+        let ch <- Std.CloseableChannel.new
+        let t ← EIO.asTask (runProducerToChannel prod ch) -- unwraps a producer like an onion, when nothing - just returns
+        pure (ch, t, prodIdx)
+      pure chsAndTasks
+    ) mergeProducers.loopTask

@@ -545,18 +545,18 @@ def minimum [Monad m] : Producer Nat m PUnit -> m (Option Nat) :=
 def sum [Monad m] : Producer Nat m PUnit -> m Nat := fold Nat.add id 0
 def product [Monad m] : Producer Nat m PUnit -> m Nat := fold Nat.mul id 1
 
-def toList : Proxy PEmpty PUnit PUnit b Id PUnit -> List b
+def toList : Proxy PEmpty PUnit PUnit b Id r -> r × List b
   | Request v _ => PEmpty.elim v
-  | Pure _ => []
-  | Respond a_val fu => a_val :: toList (fu .unit)
+  | Pure r => (r, [])
+  | Respond a_val fu => let (r, newrest) := toList (fu .unit); (r, (a_val :: newrest))
   | M mx k => toList (k (Id.run mx))
 
-def toListM [Monad m] : Producer b m PUnit → m (List b)
-  | .Pure _ => pure []
+def toListM [Monad m] : Producer b m r → m (r × List b)
+  | .Pure r => pure (r, [])
   | .Request v _ => PEmpty.elim v
   | .Respond a_val fu => do
-    let rest ← toListM (fu ())
-    pure (a_val :: rest)
+    let (r, rest) ← toListM (fu ())
+    pure (r, a_val :: rest)
   | .M mx k => do
     let x ← mx
     toListM (k x)
