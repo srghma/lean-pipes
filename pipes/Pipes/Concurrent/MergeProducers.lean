@@ -151,25 +151,30 @@ partial def Producer.Unbounded.fromCloseableChannels (chs : Array (Std.Closeable
 attribute [-instance] Std.CloseableChannel.instMonadLiftEIOErrorIO
 
 -- I just send, I dont close channel if I'm cancelled (which will never happen actually but anyway), I can only fail if channel was closed but I tried to send value (which should not happen really)
-def runProducerToChannel [ToString o] (p : Producer o BaseIO PUnit) (ch : Std.CloseableChannel o) : EIO Std.CloseableChannel.Error Unit :=
+def runProducerToChannel [ToString o] (prodIdx : Nat) (p : Producer o BaseIO PUnit) (ch : Std.CloseableChannel o) : EIO Std.CloseableChannel.Error Unit :=
   match p with
   | .Request v _ => PEmpty.elim v
   | .Pure _ => return .unit
-  | .M mx k => unlessImACanceledDo do runProducerToChannel (k (← mx)) ch
+  | .M mx k => unlessImACanceledDo do runProducerToChannel prodIdx (k (← mx)) ch
   | .Respond a cont => unlessImACanceledDo do
-    dbg_trace s!"[send] sending {a}"
+    dbg_trace s!"[producer to channel ({prodIdx})] sending {a}"
     match ← IO.wait (← Std.CloseableChannel.send ch a) with
     | Except.ok .unit =>
-        dbg_trace s!"[send] ok {a}"
-        runProducerToChannel (cont ()) ch
+        dbg_trace s!"[producer to channel ({prodIdx})]   sending res is ok {a}"
+        runProducerToChannel prodIdx (cont ()) ch
     | Except.error e =>
-        dbg_trace s!"[send] error {a}: {e}"
+        dbg_trace s!"[producer to channel ({prodIdx})]   sending res is error {a}: {e}"
         throw e
     match ← IO.wait (← Std.CloseableChannel.send ch a) with
-    | Except.ok .unit  => runProducerToChannel (cont ()) ch
+    | Except.ok .unit  => runProducerToChannel prodIdx (cont ()) ch
     | Except.error e => throw e
   where
-    unlessImACanceledDo t := do if ← IO.checkCanceled then return .unit else t
+    unlessImACanceledDo t := do
+      if ← IO.checkCanceled
+        then do
+          dbg_trace s!"[producer to channel ({prodIdx})] I was cancelled, exiting"
+          return .unit
+        else t
 
 inductive MergeError
   | selectOneError (err : IO.Error)
@@ -202,7 +207,7 @@ def mergeProducers.filterMapper
   (t : Task (Except Std.CloseableChannel.Error Unit))
   (prodIdx : Nat) :
   BaseIO (Option (Nat × Std.CloseableChannel.Error)) := do
-  dbg_trace "doing {prodIdx}";
+  dbg_trace "[filterMapper]   doing prodIdx {prodIdx}";
   match <- Std.CloseableChannel.close ch |>.toBaseIO with
     | .error e => return .some (prodIdx, e)
     | .ok .unit => do
@@ -226,13 +231,13 @@ def mergeProducers.loopTaskM [ToString o]
   let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i ≠ prodIdxToFilterIfNone
   let a2 ← a1.mapM fun (ch, t, prodIdx) => do
     let ts ← IO.getTaskState t
-    dbg_trace s!"[loop] task {prodIdx} state = {ts}"
+    dbg_trace s!"[loop]   task {prodIdx} state = {ts}"
     return (ch, t, prodIdx, ts)
   let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
   dbg_trace s!"[loop] finished={a_f.size}, unfinished={a_unf.size}"
   let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _) => do
     let r ← mergeProducers.filterMapper ch t prodIdx
-    dbg_trace s!"[loop] filterMapper {prodIdx} => {r}"
+    dbg_trace s!"[loop]   filterMapper {prodIdx} => {r}"
     return r
   if h : a_f_e = #[] then
     return (data, a_unf.map fun (ch, t, prodIdx, _taskState) => (ch, t, prodIdx))
@@ -259,7 +264,7 @@ def mergeProducers [ToString o] (producers : Array (Producer o BaseIO PUnit)) : 
       dbg_trace "[mergeProducers] starting";
       let chsAndTasks ← producers.mapIdxM fun prodIdx prod => do
         let ch ← Std.CloseableChannel.new
-        let t ← EIO.asTask (runProducerToChannel prod ch) -- unwraps a producer like an onion, when nothing - just returns
+        let t ← EIO.asTask (runProducerToChannel prodIdx prod ch) -- unwraps a producer like an onion, when nothing - just returns
         pure (ch, t, prodIdx)
       pure chsAndTasks
     ) mergeProducers.loopTask
