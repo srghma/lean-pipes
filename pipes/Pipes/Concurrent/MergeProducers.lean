@@ -150,29 +150,33 @@ partial def Producer.Unbounded.fromCloseableChannels (chs : Array (Std.Closeable
 
 attribute [-instance] Std.CloseableChannel.instMonadLiftEIOErrorIO
 
--- I just send, I dont close channel if I'm cancelled (which will never happen actually but anyway), I can only fail if channel was closed but I tried to send value (which should not happen really)
-def runProducerToChannel [ToString o] (prodIdx : Nat) (p : Producer o BaseIO PUnit) (ch : Std.CloseableChannel o) : EIO Std.CloseableChannel.Error Unit :=
+/--
+I just send, I dont close channel (even if my thread was canceled), user should do this,
+I can only fail in `send` if channel was closed but I tried to send value (which should not happen really)
+-/
+def runProducerToChannel
+  -- [ToString o]
+  (prodIdx : Nat)
+  (p : Producer o BaseIO PUnit)
+  (ch : Std.CloseableChannel o) :
+  EIO Std.CloseableChannel.Error Unit :=
   match p with
   | .Request v _ => PEmpty.elim v
-  | .Pure _ => return .unit
+  | .Pure _ => do
+    -- dbg_trace s!"[producer to channel ({prodIdx})] return .unit"
+    return .unit
   | .M mx k => unlessImACanceledDo do runProducerToChannel prodIdx (k (← mx)) ch
   | .Respond a cont => unlessImACanceledDo do
-    dbg_trace s!"[producer to channel ({prodIdx})] sending {a}"
-    match ← IO.wait (← Std.CloseableChannel.send ch a) with
-    | Except.ok .unit =>
-        dbg_trace s!"[producer to channel ({prodIdx})]   sending res is ok {a}"
-        runProducerToChannel prodIdx (cont ()) ch
-    | Except.error e =>
-        dbg_trace s!"[producer to channel ({prodIdx})]   sending res is error {a}: {e}"
-        throw e
-    match ← IO.wait (← Std.CloseableChannel.send ch a) with
-    | Except.ok .unit  => runProducerToChannel prodIdx (cont ()) ch
-    | Except.error e => throw e
+    -- dbg_trace s!"[producer to channel ({prodIdx})] sending {a}"
+    let task ← Std.CloseableChannel.send ch a
+    EIO.ofExcept $ ← IO.wait task
+    -- dbg_trace s!"[producer to channel ({prodIdx})]   sending res is ok {a}"
+    runProducerToChannel prodIdx (cont ()) ch
   where
     unlessImACanceledDo t := do
       if ← IO.checkCanceled
         then do
-          dbg_trace s!"[producer to channel ({prodIdx})] I was cancelled, exiting"
+          -- dbg_trace s!"[producer to channel ({prodIdx})] I was cancelled, exiting"
           return .unit
         else t
 

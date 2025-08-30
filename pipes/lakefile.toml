@@ -13,9 +13,6 @@ name = "PipesTest" # executable name
 # main = "PipesTest.lean"      # path to the Lean file with main
 buildType = "relWithDebInfo"
 
-# [[script]]
-# name = "PipesTest"
-
 [[require]]
 name = "aesop"
 scope = "leanprover-community"
