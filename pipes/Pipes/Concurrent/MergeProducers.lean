@@ -156,6 +156,8 @@ I can only fail in `send` if channel was closed but I tried to send value (which
 -/
 def runProducerToChannel
   -- [ToString o]
+  -- [Monad m]
+  -- [MonadLift m (EIO Std.CloseableChannel.Error)]
   (prodIdx : Nat)
   (p : Producer o BaseIO PUnit)
   (ch : Std.CloseableChannel o) :
@@ -165,7 +167,8 @@ def runProducerToChannel
   | .Pure _ => do
     -- dbg_trace s!"[producer to channel ({prodIdx})] return .unit"
     return .unit
-  | .M mx k => unlessImACanceledDo do runProducerToChannel prodIdx (k (← mx)) ch
+  | .M mx k => unlessImACanceledDo do
+    runProducerToChannel prodIdx (k (← mx)) ch
   | .Respond a cont => unlessImACanceledDo do
     -- dbg_trace s!"[producer to channel ({prodIdx})] sending {a}"
     let task ← Std.CloseableChannel.send ch a
@@ -219,9 +222,11 @@ def mergeProducers.filterMapper
         | .error e => return .some (prodIdx, e)
         | .ok .unit => return .none
 
+private abbrev C_T_Id o := Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat
+
 def mergeProducers.loopTaskM [ToString o]
-  (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat)) :
-  EIO MergeError (Option o × Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat)) := do
+  (chsAndTasks : Array (C_T_Id o)) :
+  EIO MergeError (Option o × Array (C_T_Id o)) := do
   let selectables := chsAndTasks.map fun (ch, _, prodIdx) =>
     Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) =>
       return Std.Internal.IO.Async.AsyncTask.pure (data, prodIdx)
@@ -248,8 +253,9 @@ def mergeProducers.loopTaskM [ToString o]
   else
     throw (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed a_f_e h)
 
-private partial def mergeProducers.loopTask [ToString o]
-  (chsAndTasks : Array (Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat))
+private partial def mergeProducers.loopTask
+  [ToString o]
+  (chsAndTasks : Array (C_T_Id o))
   : Producer o (EIO MergeError) Unit :=
     if chsAndTasks.isEmpty then
       Proxy.Pure .unit
@@ -260,7 +266,12 @@ private partial def mergeProducers.loopTask [ToString o]
         | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
         | .none       => mergeProducers.loopTask chsAndTAndProdIdx
 
-def mergeProducers [ToString o] (producers : Array (Producer o BaseIO PUnit)) : Producer o (EIO MergeError) Unit :=
+def mergeProducers
+  [ToString o]
+  -- [Monad m]
+  -- [MonadLift m (EIO Std.CloseableChannel.Error)]
+  (producers : Array (Producer o BaseIO PUnit)) :
+  Producer o (EIO MergeError) Unit :=
   if producers.isEmpty then
     Proxy.Pure .unit
   else

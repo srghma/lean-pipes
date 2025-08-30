@@ -2,42 +2,39 @@ import Std.Sync.Channel
 import Std.Internal.Async
 import Pipes.Concurrent.MergeProducers
 
-def logWithTime (start : Nat) (tag msg : String) : IO Unit := do
+def logWithTime (start : Nat) (tag msg : String) : BaseIO Unit := do
   let now ← IO.monoMsNow
   let elapsed := now - start
-  IO.println s!"[+{elapsed}ms][{tag}] {msg}"
+  dbg_trace s!"[+{elapsed}ms][{tag}] {msg}"
 
-partial def readAllFromChannel.impl [ToString α] (start : Nat) (ch : Std.CloseableChannel α) (acc : List α) : IO (List α) := do
-  match ← ch.sync.recv with
-  | some x => do
-    logWithTime start "main" s!"ch.sync.recv is some {x}"
-    impl start ch (x :: acc)
-  | none => do
-    logWithTime start "main" s!"ch.sync.recv is none"
-    return acc
+def testMergeProducersIntegration (start : Nat) : EIO MergeError (List Nat) := do
+  let producers : Array (Producer Nat BaseIO PUnit) := #[
+    do
+      Proxy.monadLift (logWithTime start "p1" "yielding 1")
+      Proxy.yield 1
+      Proxy.monadLift (logWithTime start "p1" "yielding 11")
+      Proxy.yield 11
+      Proxy.monadLift (logWithTime start "p1" "ended"),
+    do
+      Proxy.monadLift (logWithTime start "p2" "yielding 2")
+      Proxy.yield 2
+      Proxy.monadLift (logWithTime start "p2" "yielding 22")
+      Proxy.yield 22,
+      Proxy.monadLift (logWithTime start "p2" "ended"),
+    do
+      Proxy.monadLift (logWithTime start "p3" "yielding 3")
+      Proxy.yield 3
+      Proxy.monadLift (logWithTime start "p3" "yielding 33")
+      Proxy.yield 33
+      Proxy.monadLift (logWithTime start "p3" "ended")
+  ]
 
-def readAllFromChannel [ToString α] (start : Nat) (ch : Std.CloseableChannel α) : IO (List α) :=
-  return (← readAllFromChannel.impl start ch []).reverse
+  -- Merge them and collect results, logging each receive
+  let merged := mergeProducers producers
 
--- Test individual components first
-def testRunProducerToChannel (start : Nat) : IO (List Nat) := do
-  let ch ← Std.CloseableChannel.new
-  let producer : Producer Nat BaseIO PUnit := do
-    Proxy.yield 1
-    Proxy.yield 2
-    Proxy.yield 3
-
-  let task ← EIO.asTask (
-    try
-      runProducerToChannel 9999 producer ch
-    finally
-      ch.close
-    )
-  let results ← readAllFromChannel start ch
-  monadLift $ EIO.ofExcept $ ← IO.wait task
-  return results
+  (·.2) <$> Proxy.toListM merged
 
 def main : IO Unit := do
   let start ← IO.monoMsNow -- reference time
-  let r <- testRunProducerToChannel start
+  let r <- testMergeProducersIntegration start
   logWithTime start "main" s!"result is {r}"
