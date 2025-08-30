@@ -101,6 +101,6 @@ def testMergeProducersStress : EIO MergeError (List Nat) := do
   let (.unit, x) ← monadLift $ Proxy.toListM $ mergeProducers producers
   return x
 
-#eval do -- [0, 7]
+#eval do -- [0, 7] or [1, 9] or [8] or [0, 3] --
   let result ← monadLift testMergeProducersStress
   IO.println s!"testMergeProducersStress: {result}"

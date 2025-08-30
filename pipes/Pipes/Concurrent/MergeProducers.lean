@@ -198,7 +198,7 @@ def mergeProducers.loopTaskM
       match att with
       | .error ioError => return Except.error (MergeError.waitSelectOneTask ioError)
       | .ok (data, prodIdxToFilterIfNone) =>
-        let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i == prodIdxToFilterIfNone
+        let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i ≠ prodIdxToFilterIfNone
         let a2 ← a1.mapM fun (ch, t, prodIdx) => return (ch, t, prodIdx, ← IO.getTaskState t)
         let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
         let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _taskState) => do
