@@ -209,49 +209,48 @@ instance : ToString MergeError where
 instance : MonadLift (EIO MergeError) IO where
   monadLift x := EIO.toIO (.userError <| toString ·) x
 
-def mergeProducers.filterMapper
-  (ch : Std.CloseableChannel o)
+def mergeProducers.waitForFinishedTask
   (t : Task (Except Std.CloseableChannel.Error Unit))
   (prodIdx : Nat) :
   BaseIO (Option (Nat × Std.CloseableChannel.Error)) := do
   dbg_trace "[filterMapper]   doing prodIdx {prodIdx}";
-  match <- Std.CloseableChannel.close ch |>.toBaseIO with
+  match ← IO.wait t with
     | .error e => return .some (prodIdx, e)
-    | .ok .unit => do
-      match ← IO.wait t with
-        | .error e => return .some (prodIdx, e)
-        | .ok .unit => return .none
+    | .ok .unit => return .none
 
 private abbrev C_T_Id o := Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat
 
 def mergeProducers.loopTaskM [ToString o]
   (chsAndTasks : Array (C_T_Id o)) :
   EIO MergeError (Option o × Array (C_T_Id o)) := do
-  let selectables := chsAndTasks.map fun (ch, _, prodIdx) =>
-    Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) =>
+  let selectables := chsAndTasks.filterMap fun (ch, _, prodIdx) =>
+    .some $ Std.Internal.IO.Async.Selectable.case ch.recvSelector fun (data : Option o) =>
       return Std.Internal.IO.Async.AsyncTask.pure (data, prodIdx)
-  -- throw (MergeError.selectOneError .unexpectedEof)
+
   dbg_trace s!"[loop] waiting on {chsAndTasks.size} channels"
   let attTask <- Std.Internal.IO.Async.Selectable.one selectables |>.toEIO MergeError.selectOneError
   let att ← IO.wait attTask
   dbg_trace s!"[loop] got att = {att}"
-  let (data, prodIdxToFilterIfNone) ← EIO.ofExcept (att.mapError MergeError.waitSelectOneTask)
-  dbg_trace s!"[loop] received data = {data}, prodIdx = {prodIdxToFilterIfNone}"
-  let a1 := chsAndTasks |> if data.isSome then id else Array.filter fun (_, _, i) => i ≠ prodIdxToFilterIfNone
-  let a2 ← a1.mapM fun (ch, t, prodIdx) => do
-    let ts ← IO.getTaskState t
-    dbg_trace s!"[loop]   task {prodIdx} state = {ts}"
-    return (ch, t, prodIdx, ts)
-  let (a_f, a_unf) := a2.partition fun (_ch, _t, _prodIdx, taskState) => taskState == IO.TaskState.finished
-  dbg_trace s!"[loop] finished={a_f.size}, unfinished={a_unf.size}"
-  let a_f_e <- a_f.filterMapM fun (ch, t, prodIdx, _) => do
-    let r ← mergeProducers.filterMapper ch t prodIdx
-    dbg_trace s!"[loop]   filterMapper {prodIdx} => {r}"
-    return r
-  if h : a_f_e = #[] then
-    return (data, a_unf.map fun (ch, t, prodIdx, _taskState) => (ch, t, prodIdx))
-  else
-    throw (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed a_f_e h)
+  let (data, prodIdxThatSentData) ← EIO.ofExcept (att.mapError MergeError.waitSelectOneTask)
+  dbg_trace s!"[loop] received data = {data}, prodIdx = {prodIdxThatSentData}"
+
+  -- Only handle the specific producer that sent data
+  match data with
+  | some _value =>
+    -- Producer sent data, keep all producers
+    return (data, chsAndTasks)
+  | none =>
+    -- Producer ended, remove it and close its channel
+    let (toClose, toKeep) := chsAndTasks.partition fun (_, _, prodIdx) => prodIdx == prodIdxThatSentData
+
+    -- Close the channel for the ended producer
+    let closeErrors ← toClose.filterMapM fun (_ch, t, prodIdx) =>
+      mergeProducers.waitForFinishedTask t prodIdx
+
+    if h : closeErrors = #[] then
+      return (none, toKeep)
+    else
+      throw (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed closeErrors h)
 
 private partial def mergeProducers.loopTask
   [ToString o]
@@ -279,7 +278,11 @@ def mergeProducers
       dbg_trace "[mergeProducers] starting";
       let chsAndTasks ← producers.mapIdxM fun prodIdx prod => do
         let ch ← Std.CloseableChannel.new
-        let t ← EIO.asTask (runProducerToChannel prodIdx prod ch) -- unwraps a producer like an onion, when nothing - just returns
+        let t ← EIO.asTask (
+          try
+            runProducerToChannel prodIdx prod ch
+          finally
+            ch.close) -- unwraps a producer like an onion, when nothing - just returns
         pure (ch, t, prodIdx)
       pure chsAndTasks
     ) mergeProducers.loopTask
