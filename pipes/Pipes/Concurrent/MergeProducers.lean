@@ -220,7 +220,8 @@ def mergeProducers.waitForFinishedTask
 
 private abbrev C_T_Id o := Std.CloseableChannel o × Task (Except Std.CloseableChannel.Error Unit) × Nat
 
-def mergeProducers.loopTaskM [ToString o]
+def mergeProducers.loopTaskM
+  -- [ToString o]
   (chsAndTasks : Array (C_T_Id o)) :
   EIO MergeError (Option o × Array (C_T_Id o)) := do
   let selectables := chsAndTasks.filterMap fun (ch, _, prodIdx) =>
@@ -250,7 +251,7 @@ def mergeProducers.loopTaskM [ToString o]
       throw (MergeError.weTriedToSendToChannelOrCloseChannelAndFailed closeErrors h)
 
 private partial def mergeProducers.loopTask
-  [ToString o]
+  -- [ToString o]
   (chsAndTasks : Array (C_T_Id o))
   : Producer o (EIO MergeError) Unit :=
     if chsAndTasks.isEmpty then
@@ -263,7 +264,7 @@ private partial def mergeProducers.loopTask
         | .none       => mergeProducers.loopTask chsAndTAndProdIdx
 
 def mergeProducers
-  [ToString o]
+  -- [ToString o]
   -- [Monad m]
   -- [MonadLift m (EIO Std.CloseableChannel.Error)]
   (producers : Array (Producer o BaseIO PUnit)) :
