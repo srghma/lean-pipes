@@ -2,6 +2,7 @@ name = "PipesCorrectedness"
 version = "0.1.0"
 keywords = ["pipes", "verification"]
 defaultTargets = ["PipesCorrectedness"]
+leanOptions = { experimental.module = true }
 # moreLinkArgs = [
 #   "-L./.lake/packages/LeanCopilot/.lake/build/lib",
 #   "-lctranslate2",

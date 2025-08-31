@@ -51,13 +51,13 @@ instance RespondCategory {a' a : Type u} {m : Type u -> Type u} :
       | Respond b2 k2 ih2 =>
         simp_all
         induction h b2 with
-        | Pure a'2 => simp_all [Functor.map, Bind.bind, Proxy.bind, Proxy.forP]
+        | Pure a'2 => simp_all [Proxy.bind]
         | Respond b2 k2 ih2 => simp_all [Proxy.bind]
         | Request x' k ih => simp_all [Proxy.bind]
         | M mx ih => simp_all [Proxy.bind]
       | Request x' k ih => simp_all [Proxy.bind]
       | M mx ih => simp_all [Proxy.bind]
-    | Request x' k ih => simp_all [Proxy.bind]
+    | Request x' k ih => simp_all
     | M mx ih => simp_all
 
 end RespondCategory
@@ -98,7 +98,7 @@ instance RequestCategory {b' b : Type u} {m : Type u → Type u} :
     obtain ⟨Ya', Ya⟩ := Y
     obtain ⟨Wb', Wb⟩ := W
     obtain ⟨Za', Za⟩ := Z
-    simp only [Prod.fst, Prod.snd] at g h f arg
+    simp only at g h f arg
     dsimp
     induction h arg with
     | Pure r => rfl
@@ -133,34 +133,34 @@ def Unbounded.PushCategory [Inhabited r] (m : Type u -> Type u):
   id_comp := by
     intro ⟨b', b⟩ ⟨a', a⟩ f
     funext arg
-    simp only [Prod.fst, Prod.snd] at f arg
+    simp only at f arg
     dsimp
     induction f arg with
-    | Pure r => simp [Proxy.pushR, Proxy.pushR.go]
-    | Request a k ih => simp [Proxy.pushR, Proxy.pushR.go, ih]
-    | M mx k ih => simp [Proxy.pushR, Proxy.pushR.go, ih]
+    | Pure r => simp [Proxy.pushR]
+    | Request a k ih => simp [Proxy.pushR, ih]
+    | M mx k ih => simp [Proxy.pushR, ih]
     | Respond xb k ih =>
-      simp [Proxy.pushR, Proxy.pushR.go, ih]
+      simp [Proxy.pushR]
       rw [push.eq_def_assuming_infinity]
-      simp [Proxy.pushR, Proxy.pushR.go, ih]
+      simp [Proxy.pushR.go, ih]
   comp_id := by
     intro X Y f
     funext arg
     obtain ⟨r, argT⟩ := X
     obtain ⟨b, b'⟩ := Y
-    simp only [Prod.fst, Prod.snd] at f arg
+    simp only at f arg
     simp_all
     rw [push.eq_def_assuming_infinity]
     simp only [Proxy.pushR]
     induction f arg with
-    | Pure r => simp_all [Proxy.pushR, Proxy.pushR.go]
+    | Pure r => simp_all [Proxy.pushR.go]
     | Request a k ih =>
       simp_all [Proxy.pushR, Proxy.pushR.go]
       funext arg
       rw [push.eq_def_assuming_infinity]
-      simp_all [Proxy.pushR, Proxy.pushR.go]
-    | Respond x' k ih => simp_all [Proxy.pushR, Proxy.pushR.go]
-    | M mx k ih => simp_all [Proxy.pushR, Proxy.pushR.go]
+      simp_all [Proxy.pushR]
+    | Respond x' k ih => simp_all [Proxy.pushR.go]
+    | M mx k ih => simp_all [Proxy.pushR.go]
   assoc := by
     dsimp
     intro X Y W Z f g h
@@ -169,7 +169,7 @@ def Unbounded.PushCategory [Inhabited r] (m : Type u -> Type u):
     obtain ⟨Ya', Ya⟩ := Y
     obtain ⟨Wb', Wb⟩ := W
     obtain ⟨Za', Za⟩ := Z
-    simp only [Prod.fst, Prod.snd] at g h f arg
+    simp only at g h f arg
     apply PushCategory.push_assoc
 
 /-
@@ -224,34 +224,34 @@ def Unbounded.PullCategory [Inhabited r] (m : Type u -> Type u):
   id_comp := by
     intro ⟨b', b⟩ ⟨a', a⟩ f
     funext arg
-    simp only [Prod.fst, Prod.snd] at f arg
+    simp only at f arg
     dsimp
     rw [pull.eq_def_assuming_infinity]
-    simp [Proxy.pullR, Proxy.pullR.go]
+    simp [Proxy.pullR]
     induction f arg with
-    | Pure r => simp [Proxy.pullR, Proxy.pullR.go]
-    | Request a k ih => simp [Proxy.pullR, Proxy.pullR.go, ih]
-    | M mx k ih => simp [Proxy.pullR, Proxy.pullR.go, ih]
+    | Pure r => simp [Proxy.pullR.go]
+    | Request a k ih => simp [Proxy.pullR.go, ih]
+    | M mx k ih => simp [Proxy.pullR.go, ih]
     | Respond xb k ih =>
-      simp [Proxy.pullR, Proxy.pullR.go, ih]
+      simp [Proxy.pullR.go]
       funext karg
       rw [pull.eq_def_assuming_infinity]
-      simp [Proxy.pullR, Proxy.pullR.go, ih]
+      simp [Proxy.pullR, ih]
   comp_id := by
     intro X Y f
     funext arg
     obtain ⟨r, argT⟩ := X
     obtain ⟨b, b'⟩ := Y
-    simp only [Prod.fst, Prod.snd] at f arg
+    simp only at f arg
     simp_all
     induction f arg with
-    | Pure r => simp_all [Proxy.pullR, Proxy.pullR.go]
+    | Pure r => simp_all [Proxy.pullR]
     | Request a k ih =>
-      simp_all [Proxy.pullR, Proxy.pullR.go]
+      simp_all [Proxy.pullR]
       rw [pull.eq_def_assuming_infinity]
-      simp_all [Proxy.pullR, Proxy.pullR.go]
-    | Respond x' k ih => simp_all [Proxy.pullR, Proxy.pullR.go]
-    | M mx k ih => simp_all [Proxy.pullR, Proxy.pullR.go]
+      simp_all [Proxy.pullR.go]
+    | Respond x' k ih => simp_all
+    | M mx k ih => simp_all
   assoc := by
     dsimp
     intro X Y W Z f g h
@@ -260,5 +260,5 @@ def Unbounded.PullCategory [Inhabited r] (m : Type u -> Type u):
     obtain ⟨Ya', Ya⟩ := Y
     obtain ⟨Wb', Wb⟩ := W
     obtain ⟨Za', Za⟩ := Z
-    simp only [Prod.fst, Prod.snd] at g h f arg
+    simp only at g h f arg
     apply PullCategory.pull_assoc
