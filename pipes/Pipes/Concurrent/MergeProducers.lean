@@ -253,24 +253,26 @@ def mergeProducers.loopTaskM
 private partial def mergeProducers.loopTask
   -- [ToString o]
   (chsAndTasks : Array (C_T_Id o))
-  : Producer o (EIO MergeError) Unit :=
+  : Producer o BaseIO (Except MergeError Unit) :=
     if chsAndTasks.isEmpty then
-      Proxy.Pure .unit
+      Proxy.Pure (.ok .unit)
     else
-      Proxy.M (mergeProducers.loopTaskM chsAndTasks) fun ((data, chsAndTAndProdIdx) : (_ × Array (_ × _ × _))) =>
-        -- dbg_trace s!"[loopTask] got data={data}"
-        match data with
-        | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
-        | .none       => mergeProducers.loopTask chsAndTAndProdIdx
+      Proxy.M ((mergeProducers.loopTaskM chsAndTasks).toBaseIO) fun
+        | .error e => return .error e
+        | .ok ((data, chsAndTAndProdIdx) : (_ × Array (_ × _ × _))) =>
+          -- dbg_trace s!"[loopTask] got data={data}"
+          match data with
+          | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask chsAndTAndProdIdx
+          | .none       => mergeProducers.loopTask chsAndTAndProdIdx
 
 def mergeProducers
   -- [ToString o]
   -- [Monad m]
   -- [MonadLift m (EIO Std.CloseableChannel.Error)]
-  (producers : Array (Producer o BaseIO PUnit)) :
-  Producer o (EIO MergeError) Unit :=
+  (producers : Array (Producer o BaseIO PUnit)) : -- BaseIO instead of IO to tell that we dont handle errors
+  Producer o BaseIO (Except MergeError Unit) :=
   if producers.isEmpty then
-    Proxy.Pure .unit
+    Proxy.Pure (.ok .unit)
   else
     Proxy.M ( do
       -- dbg_trace "[mergeProducers] starting";

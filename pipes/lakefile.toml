@@ -8,11 +8,11 @@ leanOptions = { experimental.module = true }
 name = "Pipes"
 buildType = "relWithDebInfo"
 
-# [[lean_exe]]
-# name = "PipesTest" # executable name
-# # main = "PipesTest.lean"      # path to the Lean file with main
-# buildType = "relWithDebInfo"
-#
+[[lean_exe]]
+name = "PipesTest" # executable name
+# main = "PipesTest.lean"      # path to the Lean file with main
+buildType = "relWithDebInfo"
+
 # [[require]]
 # name = "aesop"
 # scope = "leanprover-community"
