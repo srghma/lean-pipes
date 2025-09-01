@@ -33,7 +33,13 @@ inductive Proxy.{ua', ua, ub', ub, umi, umo, ur}
   | Pure    : r → Proxy a' a b' b m r
 -/
 
-inductive Proxy.{u} (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u+1)
+-- inductive ProxyImpl.{u} (x : Type u) (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type u
+--   | I_Request : a' → (a → ProxyImpl x a' a b' b m r) → ProxyImpl x a' a b' b m r
+--   | I_Respond : b → (b' → ProxyImpl x a' a b' b m r) → ProxyImpl x a' a b' b m r
+--   | I_M       (op : m x) (cont : x → ProxyImpl x a' a b' b m r) : ProxyImpl x a' a b' b m r
+--   | I_Pure    : r → ProxyImpl x a' a b' b m r
+
+inductive Proxy.{u} (a' a b' b : Type u) (m : Type u → Type u) (r : Type u) : Type (u + 1)
   | Request : a' → (a → Proxy a' a b' b m r) → Proxy a' a b' b m r
   | Respond : b → (b' → Proxy a' a b' b m r) → Proxy a' a b' b m r
   | M       {x : Type u} (op : m x) (cont : x → Proxy a' a b' b m r) : Proxy a' a b' b m r
