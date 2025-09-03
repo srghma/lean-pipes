@@ -14,23 +14,23 @@ def mergeProducersConcat.Array (producers : Array (Producer o m r)) : Producer o
   Array.foldlM (as := producers) (init := #[]) fun acc p => return (acc.push (← p))
 
 ----------------------------------------------------------------------------
-private def mergeProducersRoundRobit.loop (returns : List r) (ps : List (Producer o m r)) : Producer o m (List r) := do
+private def mergeProducersRoundRobit.List.loop (returns : List r) (ps : List (Producer o m r)) : Producer o m (List r) := do
   match ps with
   | [] => Proxy.Pure returns.reverse
   | p :: rest =>
       match p with
       | Proxy.Respond x k => Proxy.Respond x fun .unit => do
-        let (newReturns : List r) <- mergeProducersRoundRobit.loop returns rest
+        let (newReturns : List r) <- mergeProducersRoundRobit.List.loop returns rest
         let (kret : r) <- k .unit
         Proxy.Pure (kret :: newReturns)
-      | Proxy.Pure r => mergeProducersRoundRobit.loop (r :: returns) rest
+      | Proxy.Pure r => mergeProducersRoundRobit.List.loop (r :: returns) rest
       | Proxy.Request v _ => PEmpty.elim v
       | Proxy.M op k => Proxy.M op fun x => do
-        let (newReturns : List r) <- mergeProducersRoundRobit.loop returns rest
+        let (newReturns : List r) <- mergeProducersRoundRobit.List.loop returns rest
         let (kret : r) <- k x
         Proxy.Pure (kret :: newReturns)
 
-abbrev mergeProducersRoundRobit : List (Producer o m r) -> Producer o m (List r) := mergeProducersRoundRobit.loop []
+abbrev mergeProducersRoundRobit.List : List (Producer o m r) -> Producer o m (List r) := mergeProducersRoundRobit.List.loop []
 
 ----------------------------------------------------------------------------
 
@@ -43,6 +43,6 @@ def example1: List (Producer Nat Id Char) := [
 ]
 
 #guard (['1', '2', '3'], [1, 11, 111, 2, 22, 3, 33]) = Proxy.toList (mergeProducersConcat.List example1)
-#guard (['1', '2', '3'], [1, 2, 3, 33, 22, 11, 111]) = Proxy.toList (mergeProducersRoundRobit example1)
+#guard (['1', '2', '3'], [1, 2, 3, 33, 22, 11, 111]) = Proxy.toList (mergeProducersRoundRobit.List example1)
 
 end MergePureProducersTest
