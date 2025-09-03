@@ -1,4 +1,3 @@
-module
 import Pipes.Internal
 import Pipes.Core
 
