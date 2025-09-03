@@ -11,7 +11,7 @@ def readAllFromChannel (ch : Std.CloseableChannel α) : IO (List α) :=
 -- Test individual components first
 def testRunProducerToChannel : IO (List Nat) := do
   let ch ← Std.CloseableChannel.new
-  let producer : Producer Nat BaseIO PUnit := do
+  let producer : Producer Nat BaseIO Unit := do
     Proxy.yield 1
     Proxy.yield 2
     Proxy.yield 3
@@ -23,7 +23,7 @@ def testRunProducerToChannel : IO (List Nat) := do
       ch.close
     )
   let results ← readAllFromChannel ch
-  monadLift $ EIO.ofExcept $ ← IO.wait task
+  let (_ : Option Unit) <- monadLift $ EIO.ofExcept $ ← IO.wait task
   return results
 
 /-- info: [1, 2, 3] -/

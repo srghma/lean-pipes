@@ -1,0 +1,21 @@
+-- https://dev.to/mikesol/a-new-definition-of-behavior-2076
+-- https://dev.to/mikesol/events-are-best-served-hot-33hc
+
+def Event (α : Type) := (α -> BaseIO Unit) → BaseIO (BaseIO Unit)
+def Behavior (α : Type) := BaseIO (BaseIO Unit × BaseIO α)
+
+structure EventIO a where
+  event : Event a
+  push : a -> BaseIO Unit
+
+-- Create a hot event with push capability
+def Event.create : BaseIO (EventIO a) := do
+  -- Simplified implementation using a list of subscribers
+  let subscribers ← IO.mkRef ([] : List (α → BaseIO Unit))
+  let event : Event α := fun k => do
+    subscribers.modify (k :: ·)
+    pure (subscribers.modify (List.filter (· != k)))
+  let push : α → BaseIO Unit := fun a => do
+    subs ← subscribers.get
+    subs.forM (fun k => k a)
+  pure $ EventIO.mk event push

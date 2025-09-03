@@ -14,10 +14,32 @@ name = "PipesTest" # executable name
 buildType = "relWithDebInfo"
 
 # [[require]]
+# name = "batteries"
+# scope = "leanprover-community"
+# rev = "main"
+#
+# [[require]]
+# name = "mathlib4"
+# scope = "leanprover-community"
+# rev = "main"
+
+# [[require]]
 # name = "aesop"
 # scope = "leanprover-community"
 # git = "https://github.com/leanprover-community/aesop"
-
+#
 # [[require]]
 # name = "Canonical"
 # scope = "chasenorman"
+# git = "https://github.com/srghma/CanonicalLean"
+# rev = "fix-v4.23.0-rc2"
+
+# [[require]]
+# name = "NonEmpty"
+# git = "https://github.com/srghma/lean-nonempty"
+# rev = "main"
+
+# [[require]]
+# name = "Hammer"
+# git = "https://github.com/JOSHCLUNE/LeanHammer"
+# rev = "main"

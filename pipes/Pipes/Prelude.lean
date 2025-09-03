@@ -732,4 +732,12 @@ partial def Unbounded.repeatP
 
 def failure [Alternative m] : Proxy a' a b' b m r := Proxy.monadLift Alternative.failure
 
+def Producer.EIOtoBaseIO : Proxy a' a b' b (EIO ε) r → Proxy a' a b' b BaseIO (Except ε r)
+  | .Request v k    => .Request v (fun a => Producer.EIOtoBaseIO (k a))
+  | .Respond o k    => .Respond o (fun u => Producer.EIOtoBaseIO (k u))
+  | .M m k          => .M (EIO.toBaseIO m) fun
+    | .error e => .Pure (.error e)
+    | .ok r => Producer.EIOtoBaseIO (k r)
+  | .Pure r         => .Pure (.ok r)
+
 end Proxy
