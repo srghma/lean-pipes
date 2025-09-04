@@ -148,6 +148,9 @@ private partial def mergeProducers.loopTask
           match data with
           | .some value => Proxy.Respond value fun _ => mergeProducers.loopTask (oldReturns ++ returns) chsAndTAndProdIdx
           | .none       => mergeProducers.loopTask (oldReturns ++ returns) chsAndTAndProdIdx
+  -- termination_by chsAndTasks.size
+  -- decreasing_by
+  --   sorry
 
 def mergeProducers
   -- [ToString o]
